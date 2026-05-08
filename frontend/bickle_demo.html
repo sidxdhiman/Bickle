@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bickle MVP - Portable Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0a0a0a; color: white; font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; overflow: hidden; }
+        .glass { background: rgba(26, 26, 26, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="flex h-screen w-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 h-full bg-[#121212] border-r border-neutral-800 flex flex-col p-4 gap-8">
+        <div class="flex items-center gap-3 px-2 py-4">
+            <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-white">B</div>
+            <span class="text-xl font-bold tracking-tight">Bickle</span>
+        </div>
+        <nav id="sidebar-nav" class="flex-1 flex flex-col gap-2">
+            <!-- Nav items injected by JS -->
+        </nav>
+        <div class="mt-auto pt-4 border-t border-neutral-800 flex flex-col gap-2">
+            <div class="p-3 rounded-lg text-neutral-400 hover:bg-neutral-800 cursor-pointer transition-all">Settings</div>
+            <div class="p-3 rounded-lg text-neutral-400 hover:bg-red-900/20 hover:text-red-400 cursor-pointer transition-all">Logout</div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- TopNav -->
+        <header class="h-16 border-b border-neutral-800 glass flex items-center justify-between px-6 sticky top-0 z-10">
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <input type="text" placeholder="Quick search..." class="pl-4 pr-4 py-1.5 bg-neutral-900 border border-neutral-800 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64 transition-all text-white">
+                </div>
+                <div id="current-date" class="text-sm text-neutral-400 font-medium ml-4"></div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3 pl-4 border-l border-neutral-800">
+                    <div class="text-right">
+                        <p class="text-sm font-semibold leading-none">Sidharth</p>
+                        <p class="text-xs text-neutral-400">Pro Plan</p>
+                    </div>
+                    <div class="w-9 h-9 bg-neutral-800 rounded-full border border-neutral-700 flex items-center justify-center">👤</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Page Content -->
+        <main id="main-content" class="flex-1 overflow-y-auto p-8">
+            <!-- Content injected by JS -->
+        </main>
+    </div>
+
+    <script>
+        const pages = {
+            'Dashboard': `
+                <div class="max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+                    <header>
+                        <h1 class="text-3xl font-bold tracking-tight">Welcome back, Sidharth! 👋</h1>
+                        <p class="text-neutral-400">Here's what's happening with your productivity today.</p>
+                    </header>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        ${['Tasks Due', 'Completed', 'Upcoming Events', 'Notes'].map(title => `
+                            <div class="p-6 rounded-2xl bg-[#1a1a1a] border border-neutral-800 hover:border-indigo-500 transition-all cursor-pointer">
+                                <p class="text-sm text-neutral-400 mb-2">${title}</p>
+                                <p class="text-3xl font-bold">0</p>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2 p-12 rounded-2xl bg-[#1a1a1a] border border-neutral-800 h-96 flex items-center justify-center text-neutral-500 italic">Agenda Preview</div>
+                        <div class="p-12 rounded-2xl bg-[#1a1a1a] border border-neutral-800 h-96 flex items-center justify-center text-neutral-500 italic">Quick Actions</div>
+                    </div>
+                </div>
+            `,
+            'Tasks': `
+                <div class="max-w-7xl mx-auto space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h1 class="text-3xl font-bold">My Tasks</h1>
+                        <button class="bg-indigo-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all">+ New Task</button>
+                    </div>
+                    <div class="bg-[#1a1a1a] border border-neutral-800 rounded-2xl overflow-hidden">
+                        <div class="grid grid-cols-12 gap-4 px-6 py-3 border-b border-neutral-800 text-xs font-semibold text-neutral-400 uppercase">
+                            <div class="col-span-6">Task</div>
+                            <div class="col-span-2 text-center">Priority</div>
+                            <div class="col-span-2 text-center">Due Date</div>
+                            <div class="col-span-2 text-right">Action</div>
+                        </div>
+                        <div class="p-6 text-center text-neutral-500 italic">No tasks found. Start by adding some!</div>
+                    </div>
+                </div>
+            `,
+            'Calendar': `
+                <div class="max-w-7xl mx-auto space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h1 class="text-3xl font-bold">Calendar</h1>
+                        <button class="bg-indigo-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all">+ Add Event</button>
+                    </div>
+                    <div class="bg-[#1a1a1a] border border-neutral-800 rounded-2xl h-[600px] flex items-center justify-center text-neutral-500 italic">
+                        Month View Grid Rendering...
+                    </div>
+                </div>
+            `,
+            'Notes': `
+                <div class="max-w-7xl mx-auto space-y-6">
+                    <div class="flex justify-between items-center">
+                        <h1 class="text-3xl font-bold">Notes</h1>
+                        <button class="bg-indigo-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all">+ New Note</button>
+                    </div>
+                    <div class="grid grid-cols-12 gap-6 h-[600px]">
+                        <div class="col-span-3 bg-[#1a1a1a] border border-neutral-800 rounded-2xl p-4 space-y-2">
+                            <p class="text-xs font-bold text-neutral-500 uppercase mb-4">Categories</p>
+                            <div class="p-2 rounded-lg bg-indigo-600 text-white text-sm cursor-pointer">All Notes</div>
+                            <div class="p-2 rounded-lg hover:bg-neutral-800 text-neutral-400 text-sm cursor-pointer transition-all">Work</div>
+                            <div class="p-2 rounded-lg hover:bg-neutral-800 text-neutral-400 text-sm cursor-pointer transition-all">Personal</div>
+                        </div>
+                        <div class="col-span-9 bg-[#1a1a1a] border border-neutral-800 rounded-2xl p-8 flex items-center justify-center text-neutral-500 italic">
+                            Select a note to start writing...
+                        </div>
+                    </div>
+                </div>
+            `
+        };
+
+        let activePage = 'Dashboard';
+
+        function updateUI() {
+            // Update Sidebar
+            const nav = document.getElementById('sidebar-nav');
+            nav.innerHTML = Object.keys(pages).map(page => `
+                <div onclick="setPage('${page}')" class="p-3 rounded-lg cursor-pointer transition-all text-sm font-medium ${activePage === page ? 'bg-indigo-600 text-white' : 'text-neutral-400 hover:bg-neutral-800 hover:text-white'}">
+                    ${page}
+                </div>
+            `).join('');
+
+            // Update Content
+            document.getElementById('main-content').innerHTML = pages[activePage];
+        }
+
+        window.setPage = (page) => {
+            activePage = page;
+            updateUI();
+        };
+
+        // Set Date
+        document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+        updateUI();
+    </script>
+</body>
+</html>

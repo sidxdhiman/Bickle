@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(npm create *)",
+      "Bash(npx tailwindcss *)",
+      "Bash(cp -r /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/backend/frontend/backend/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/cleanup_backend/)",
+      "Bash(cp -r /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/backend/frontend/src /c/Users/SidharthDhiman/Downloads/Sid/Bickle/cleanup_frontend/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/cleanup_backend/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/cleanup_frontend/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/frontend/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/controllers/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/controllers/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/backend/frontend/backend/controllers/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/controllers/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/middleware/* /c/Users/SidharthDHiman/Downloads/Sid/Bickle/backend/middleware/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/models/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/models/)",
+      "Bash(mv /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/backend/frontend/backend/models/* /c/Users/SidharthDhiman/Downloads/Sid/Bickle/backend/models/)",
+      "Bash(sed -i 's|./components/Sidebar|../components/Sidebar|g' /c/Users/SidharthDhiman/Downloads/Sid/Bickle/frontend/src/layouts/MainLayout.jsx)",
+      "Bash(sed -i 's|./components/TopNav|../components/TopNav|g' /c/Users/SidharthDHiman/Downloads/Sid/Bickle/frontend/src/layouts/MainLayout.jsx)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(taskkill //F //IM vite.exe)",
+      "Bash(nohup npm run dev)"
+    ]
+  }
+}

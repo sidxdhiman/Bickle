@@ -1,0 +1,21 @@
+
+> bickle-backend@1.0.0 dev
+> nodemon server.js
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node server.js`[39m
+MongoDB connection error: MongooseError: The `uri` parameter to `openUri()` must be a string, got "undefined". Make sure the first parameter to `mongoose.connect()` or `mongoose.createConnection()` is a string.
+    at NativeConnection.createClient (C:\Users\SidharthDhiman\Downloads\Sid\Bickle\backend\node_modules\mongoose\lib\drivers\node-mongodb-native\connection.js:237:11)
+    at NativeConnection.openUri (C:\Users\SidharthDhiman\Downloads\Sid\Bickle\backend\node_modules\mongoose\lib\connection.js:1075:34)
+    at Mongoose.connect (C:\Users\SidharthDhiman\Downloads\Sid\Bickle\backend\node_modules\mongoose\lib\mongoose.js:450:15)
+    at Object.<anonymous> (C:\Users\SidharthDhiman\Downloads\Sid\Bickle\backend\server.js:25:10)
+    at Module._compile (node:internal/modules/cjs/loader:1830:14)
+    at Object..js (node:internal/modules/cjs/loader:1961:10)
+    at Module.load (node:internal/modules/cjs/loader:1553:32)
+    at Module._load (node:internal/modules/cjs/loader:1355:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+[32m[nodemon] clean exit - waiting for changes before restart[39m
