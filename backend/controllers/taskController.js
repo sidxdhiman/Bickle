@@ -46,6 +46,22 @@ exports.deleteList = async (req, res) => {
   }
 };
 
+// Update list statuses
+exports.updateListStatuses = async (req, res) => {
+  try {
+    const { statuses } = req.body;
+    const list = await TaskList.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { statuses },
+      { new: true }
+    );
+    if (!list) return res.status(404).json({ message: 'List not found' });
+    res.json(list);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // --- Task Controllers ---
 
 exports.createTask = async (req, res) => {

@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
 import Notes from './pages/Notes';
+import Sleep from './pages/Sleep';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -58,6 +59,7 @@ const App = () => {
           <Route path="tasks" element={<Tasks />} />
           <Route path="calendar" element={<Calendar />} />
           <Route path="notes" element={<Notes />} />
+          <Route path="sleep" element={<Sleep />} />
         </Route>
       </Routes>
     </BrowserRouter>

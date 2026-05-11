@@ -5,6 +5,7 @@ import {
   CheckSquare,
   Calendar as CalendarIcon,
   FileText,
+  Moon,
   Settings,
   LogOut
 } from 'lucide-react';
@@ -20,6 +21,7 @@ const navItems = [
   { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
   { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
   { icon: FileText, label: 'Notes', path: '/notes' },
+  { icon: Moon, label: 'Sleep', path: '/sleep' },
 ];
 
 const Sidebar = () => {
