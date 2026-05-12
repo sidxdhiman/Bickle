@@ -12,6 +12,26 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+const defaultStatusOptions = [
+  { id: 'todo', label: 'To Do', color: '#64748b' },
+  { id: 'in-progress', label: 'In Progress', color: '#3b82f6' },
+  { id: 'completed', label: 'Completed', color: '#10b981' },
+];
+
+const getStatusLabel = (statusId, statuses = defaultStatusOptions) => {
+  const status = statuses.find(item => item.id === statusId);
+  return status ? status.label : '-';
+};
+
+const getStatusOptionsForTask = (task, lists) => {
+  const taskList = lists.find(list => list._id === task.list);
+  const statuses = taskList?.statuses || defaultStatusOptions;
+  if (statuses.some(status => status.id === task.status)) {
+    return statuses;
+  }
+  return [{ id: 'unassigned', label: '-' }, ...statuses];
+};
+
 const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
   const [formData, setFormData] = useState({
     title: '',
@@ -24,11 +44,25 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
   });
 
   const selectedListObj = lists.find(l => l._id === formData.list);
-  const statusOptions = selectedListObj?.statuses || [
-    { id: 'todo', label: 'To Do' },
-    { id: 'in-progress', label: 'In Progress' },
-    { id: 'completed', label: 'Completed' },
-  ];
+  let statusOptions = selectedListObj?.statuses || defaultStatusOptions;
+  if (!statusOptions.some(status => status.id === formData.status)) {
+    statusOptions = [{ id: 'unassigned', label: '-' }, ...statusOptions];
+  }
+
+  const getDefaultStatusForList = (listId) => {
+    const list = lists.find(l => l._id === listId);
+    return list?.statuses?.[0]?.id || 'todo';
+  };
+
+  const handleListChange = (e) => {
+    const selectedListId = e.target.value;
+    const defaultStatus = getDefaultStatusForList(selectedListId);
+    setFormData(prev => ({
+      ...prev,
+      list: selectedListId,
+      status: defaultStatus,
+    }));
+  };
 
   useEffect(() => {
     if (task) {
@@ -41,8 +75,15 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
         tags: task.tags || []
       });
-    } else if (lists.length > 0 && !formData.list) {
-      setFormData(prev => ({ ...prev, list: lists[0]._id }));
+    } else if (lists.length > 0) {
+      const defaultListId = formData.list || lists[0]._id;
+      setFormData(prev => ({
+        ...prev,
+        list: defaultListId,
+        status: prev.status && statusOptions.some(status => status.id === prev.status)
+          ? prev.status
+          : getDefaultStatusForList(defaultListId),
+      }));
     }
   }, [task, lists]);
 
@@ -52,12 +93,13 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
     e.preventDefault();
     onSubmit(formData);
     if (!task) {
+      const defaultListId = lists[0]?._id || '';
       setFormData({
         title: '',
         description: '',
-        list: lists[0]?._id || '',
+        list: defaultListId,
         priority: 'medium',
-        status: 'todo',
+        status: getDefaultStatusForList(defaultListId),
         dueDate: '',
         tags: []
       });
@@ -109,7 +151,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
             <select
               required
               value={formData.list}
-              onChange={e => setFormData({...formData, list: e.target.value})}
+              onChange={handleListChange}
               className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm transition-colors"
             >
               {lists.map(list => (
@@ -181,12 +223,27 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
 
   const getListName = (id) => lists.find(l => l._id === id)?.name || 'Unknown';
   const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString() : 'No date';
+  const baseTaskStatusOptions = lists.find(l => l._id === task.list)?.statuses || defaultStatusOptions;
+  const currentTaskStatus = baseTaskStatusOptions.some(status => status.id === task.status) ? task.status : 'unassigned';
+  const taskStatusOptions = currentTaskStatus === 'unassigned'
+    ? [{ id: 'unassigned', label: '-' }, ...baseTaskStatusOptions]
+    : baseTaskStatusOptions;
+
+  const handleStatusChange = async (newStatus) => {
+    if (newStatus === 'unassigned') return;
+    try {
+      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
+      onUpdate(res.data);
+    } catch (error) {
+      console.error('Error updating task status:', error);
+    }
+  };
 
   const handleStatusToggle = async () => {
     const newStatus = task.status === 'completed' ? 'todo' : 'completed';
     try {
-      await axios.put(`/tasks/${task._id}`, { status: newStatus });
-      onUpdate({ ...task, status: newStatus });
+      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
+      onUpdate(res.data);
     } catch (error) {
       console.error('Error updating task status:', error);
     }
@@ -284,19 +341,23 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
             </div>
             <div className="bg-secondary/30 border border-border rounded-md p-3">
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Status</h3>
-              <span className={cn(
-                "inline-flex items-center px-2 py-1 text-xs font-medium rounded-full",
-                task.status === 'completed' ? "bg-green-500/10 text-green-500 border border-green-500/20" :
-                task.status === 'in-progress' ? "bg-blue-500/10 text-blue-500 border border-blue-500/20" :
-                "bg-slate-500/10 text-slate-500 border border-slate-500/20"
-              )}>
-                {task.status === 'in-progress' ? 'In Progress' : task.status}
-              </span>
+              <select
+                value={currentTaskStatus}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="w-full rounded border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                {taskStatusOptions.some(status => status.id === 'unassigned') && (
+                  <option value="unassigned">-</option>
+                )}
+                {taskStatusOptions.filter(status => status.id !== 'unassigned').map(status => (
+                  <option key={status.id} value={status.id}>{status.label}</option>
+                ))}
+              </select>
             </div>
           </div>
 
           {/* Additional info */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="bg-secondary/30 border border-border rounded-md p-3">
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">List</h3>
               <p className="text-sm text-foreground">{getListName(task.list)}</p>
@@ -305,8 +366,110 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Due Date</h3>
               <p className="text-sm text-foreground">{formatDate(task.dueDate)}</p>
             </div>
+            <div className="bg-secondary/30 border border-border rounded-md p-3">
+              <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Added</h3>
+              <p className="text-sm text-foreground">{formatDate(task.createdAt)}</p>
+            </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const CreateListModal = ({ isOpen, onClose, onCreate }) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormData({ name: '', description: '' });
+      setError('');
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      await onCreate(formData);
+      onClose();
+    } catch (error) {
+      console.error('Error creating list:', error);
+      setError('Failed to create list. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
+          <h2 className="text-lg sm:text-xl font-bold">Create New List</h2>
+          <button
+            onClick={onClose}
+            className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">List Name</label>
+            <input
+              required
+              type="text"
+              value={formData.name}
+              onChange={e => setFormData({ ...formData, name: e.target.value })}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm transition-colors"
+              placeholder="Enter list name..."
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-foreground mb-2">Description</label>
+            <textarea
+              value={formData.description}
+              onChange={e => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm resize-none transition-colors"
+              rows={3}
+              placeholder="Add a short description..."
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4 border-t border-border">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="flex-1 bg-secondary text-secondary-foreground py-2 rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              {loading ? 'Creating...' : 'Create List'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
@@ -377,7 +540,7 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
       await axios.put(`/lists/${list._id}/statuses`, {
         statuses: formData.statuses
       });
-      onUpdate();
+      await onUpdate();
       onClose();
     } catch (error) {
       console.error('Error updating list:', error);
@@ -556,6 +719,7 @@ const TaskPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isListManagementOpen, setIsListManagementOpen] = useState(false);
+  const [isCreateListOpen, setIsCreateListOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [editingList, setEditingList] = useState(null);
@@ -630,14 +794,30 @@ const TaskPage = () => {
     }
   };
 
+  const handleStatusChange = async (task, newStatus) => {
+    if (newStatus === 'unassigned') return;
+    try {
+      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
+      setTasks(prev => prev.map(t => t._id === task._id ? res.data : t));
+      if (selectedTask?._id === task._id) {
+        setSelectedTask(res.data);
+      }
+    } catch (error) {
+      console.error('Error updating task status:', error);
+    }
+  };
+
   const getListName = (id) => lists.find(l => l._id === id)?.name || 'Unknown';
   const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString() : 'No date';
 
   // Get current list object
   const currentList = selectedList === 'all' ? null : lists.find(l => l._id === selectedList);
 
+  const customStatusColumns = currentList?.statuses || [];
+  const hasStatuses = currentList ? customStatusColumns.length > 0 : true;
+
   // Get status columns - use custom statuses from selected list or defaults
-  const statusColumns = currentList?.statuses || [
+  const statusColumns = currentList ? customStatusColumns : [
     { id: 'todo', label: 'To Do', color: '#64748b' },
     { id: 'in-progress', label: 'In Progress', color: '#3b82f6' },
     { id: 'completed', label: 'Completed', color: '#10b981' },
@@ -664,18 +844,6 @@ const TaskPage = () => {
   };
 
   // List management handlers
-  const handleCreateList = async () => {
-    const name = prompt('Enter new list name:');
-    if (name) {
-      try {
-        const res = await axios.post('/lists', { name, isFavorite: false });
-        setLists(prev => [...prev, res.data]);
-      } catch (error) {
-        console.error('Error creating list:', error);
-      }
-    }
-  };
-
   const handleDeleteList = async (listId) => {
     if (window.confirm('Are you sure you want to delete this list and all its tasks?')) {
       try {
@@ -695,8 +863,25 @@ const TaskPage = () => {
     setIsListManagementOpen(true);
   };
 
+  const handleCreateList = () => {
+    setIsCreateListOpen(true);
+  };
+
+  const handleCreateListSubmit = async (listData) => {
+    try {
+      const res = await axios.post('/lists', {
+        ...listData,
+        isFavorite: false,
+        statuses: defaultStatusOptions,
+      });
+      setLists(prev => [...prev, res.data]);
+      setSelectedList(res.data._id);
+    } catch (error) {
+      console.error('Error creating list:', error);
+    }
+  };
+
   const handleListManagementUpdate = async () => {
-    setLists(prev => prev.map(l => l._id === editingList._id ? editingList : l));
     setEditingList(null);
     const updatedLists = await axios.get('/lists');
     setLists(updatedLists.data);
@@ -730,6 +915,12 @@ const TaskPage = () => {
         }}
       />
 
+      <CreateListModal
+        isOpen={isCreateListOpen}
+        onClose={() => setIsCreateListOpen(false)}
+        onCreate={handleCreateListSubmit}
+      />
+
       <ListManagementModal
         isOpen={isListManagementOpen}
         onClose={() => setIsListManagementOpen(false)}
@@ -746,11 +937,11 @@ const TaskPage = () => {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-muted-foreground" />
-            <div className="flex items-center gap-1 bg-background border border-border rounded-md">
+            <div className="flex items-center gap-2 bg-background border border-border rounded-md px-1">
               <select
                 value={selectedList}
                 onChange={(e) => setSelectedList(e.target.value)}
-                className="px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm flex-1"
+                className="min-w-[180px] px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm flex-1"
               >
                 <option value="all">All Lists</option>
                 {lists.map(list => (
@@ -758,7 +949,7 @@ const TaskPage = () => {
                 ))}
               </select>
               {selectedList !== 'all' && (
-                <div className="flex items-center gap-1 pr-1">
+                <div className="flex items-center gap-2 pr-2">
                   <button
                     onClick={() => handleOpenListManagement(currentList)}
                     className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-all rounded"
@@ -824,19 +1015,31 @@ const TaskPage = () => {
             <div className="divide-y divide-border overflow-y-auto flex-1">
               {filteredTasks.map(task => (
                 <div key={task._id} className="grid grid-cols-12 gap-4 px-4 sm:px-6 py-4 items-center hover:bg-accent/50 transition-colors group cursor-pointer" onClick={() => handleTaskClick(task)}>
-                  <div className="col-span-4 sm:col-span-5 flex items-center gap-3">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleComplete(task);
-                      }}
-                      className="text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {task.status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5" />}
-                    </button>
-                    <span className={cn("font-medium transition-all", task.status === 'completed' && "line-through text-muted-foreground")}>
-                      {task.title}
-                    </span>
+                  <div className="col-span-4 sm:col-span-5 flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleComplete(task);
+                        }}
+                        className="text-muted-foreground hover:text-primary transition-colors"
+                      >
+                        {task.status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5" />}
+                      </button>
+                      <span className={cn("font-medium transition-all", task.status === 'completed' && "line-through text-muted-foreground")}>
+                        {task.title}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Tag className="w-3 h-3" />
+                        {getListName(task.list)}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        Added {formatDate(task.createdAt)}
+                      </span>
+                    </div>
                   </div>
                   <div className="col-span-2 flex justify-center hidden sm:flex">
                     <span className={cn(
@@ -848,14 +1051,26 @@ const TaskPage = () => {
                     </span>
                   </div>
                   <div className="col-span-2 flex justify-center text-sm text-muted-foreground hidden sm:flex">
-                    <span className={cn(
-                      "px-2 py-0.5 text-[10px] font-bold uppercase border rounded",
-                      task.status === 'todo' ? "bg-slate-500/10 text-slate-500 border-slate-500/20" :
-                      task.status === 'in-progress' ? "bg-blue-500/10 text-blue-500 border-blue-500/20" :
-                      "bg-green-500/10 text-green-500 border-green-500/20"
-                    )}>
-                      {task.status === 'in-progress' ? 'In Progress' : task.status}
-                    </span>
+                    {(() => {
+                      const options = getStatusOptionsForTask(task, lists);
+                      const selectedValue = options.some(status => status.id === task.status) ? task.status : 'unassigned';
+                      return (
+                        <select
+                          value={selectedValue}
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleStatusChange(task, e.target.value);
+                          }}
+                          className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                        >
+                          {options.map(status => (
+                            <option key={status.id} value={status.id}>{status.label}</option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                   <div className="col-span-2 flex justify-center text-sm text-muted-foreground hidden md:flex">
                     <div className="flex items-center gap-1.5">
@@ -900,26 +1115,49 @@ const TaskPage = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 h-full">
-            {statusColumns.map(col => (
-              <div
-                key={col.id}
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop(col.id)}
-                className="flex flex-col gap-4 bg-secondary/20 p-4 border border-border rounded-lg transition-all hover:border-primary/50 hover:bg-secondary/30"
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: col.color }}
-                  />
-                  <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">{col.label}</h3>
-                  <span className="ml-auto px-2 py-0.5 bg-secondary border border-border text-xs rounded-full">
-                    {filteredTasks.filter(t => t.status === col.id).length}
-                  </span>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-3">
-                  {filteredTasks.filter(t => t.status === col.id).map(task => (
+            {currentList && !hasStatuses ? (
+              <div className="col-span-1 md:col-span-3 flex flex-col items-center justify-center rounded-lg border border-border bg-secondary/10 p-8 text-center">
+                <button
+                  onClick={() => handleOpenListManagement(currentList)}
+                  className="mb-4 inline-flex items-center justify-center rounded-full border border-dashed border-border bg-background p-5 text-muted-foreground hover:border-primary hover:text-primary transition-all"
+                  title="Add status"
+                >
+                  <Plus className="w-6 h-6" />
+                </button>
+                <p className="text-sm text-muted-foreground">No statuses yet. Add a status to start organizing this list.</p>
+              </div>
+            ) : (
+              statusColumns.map(col => (
+                <div
+                  key={col.id}
+                  onDragOver={handleDragOver}
+                  onDrop={() => handleDrop(col.id)}
+                  className="flex flex-col gap-4 bg-secondary/20 p-4 border border-border rounded-lg transition-all hover:border-primary/50 hover:bg-secondary/30"
+                >
+                  <div className="flex items-center gap-2">
                     <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: col.color }}
+                    />
+                    <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">{col.label}</h3>
+                    <div className="ml-auto flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-secondary border border-border text-xs rounded-full">
+                        {filteredTasks.filter(t => t.status === col.id).length}
+                      </span>
+                      {currentList && col.id === statusColumns[statusColumns.length - 1]?.id && (
+                        <button
+                          onClick={() => handleOpenListManagement(currentList)}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-all"
+                          title="Add status"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-3">
+                    {filteredTasks.filter(t => t.status === col.id).map(task => (
+                      <div
                       key={task._id}
                       draggable
                       onDragStart={() => handleDragStart(task)}
@@ -994,7 +1232,8 @@ const TaskPage = () => {
                   </button>
                 </div>
               </div>
-            ))}
+            ))
+            )}
           </div>
         )}
       </div>
