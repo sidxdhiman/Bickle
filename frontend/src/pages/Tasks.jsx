@@ -32,6 +32,13 @@ const getStatusOptionsForTask = (task, lists) => {
   return [{ id: 'unassigned', label: '-' }, ...statuses];
 };
 
+const isTaskOverdue = (task) => {
+  if (!task?.dueDate || task.status === 'completed') return false;
+  const due = new Date(task.dueDate);
+  due.setHours(23, 59, 59, 999);
+  return due < new Date();
+};
+
 const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
   const [formData, setFormData] = useState({
     title: '',
@@ -364,7 +371,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
             </div>
             <div className="bg-secondary/30 border border-border rounded-md p-3">
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Due Date</h3>
-              <p className="text-sm text-foreground">{formatDate(task.dueDate)}</p>
+              <p className={cn("text-sm", isTaskOverdue(task) ? "text-red-600 font-semibold" : "text-foreground")}>{formatDate(task.dueDate)}</p>
             </div>
             <div className="bg-secondary/30 border border-border rounded-md p-3">
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Added</h3>
@@ -1072,14 +1079,13 @@ const TaskPage = () => {
                       );
                     })()}
                   </div>
-                  <div className="col-span-2 flex justify-center text-sm text-muted-foreground hidden md:flex">
-                    <div className="flex items-center gap-1.5">
+                  <div className="col-span-2 flex justify-center text-sm hidden md:flex">
+                    <div className={cn("flex items-center gap-1.5", isTaskOverdue(task) ? "text-red-600" : "text-muted-foreground") }>
                       <Calendar className="w-3 h-3" />
                       {formatDate(task.dueDate)}
                     </div>
                   </div>
                   <div className="col-span-2 sm:col-span-1 flex justify-end">
-                    <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1103,7 +1109,6 @@ const TaskPage = () => {
                       </button>
                     </div>
                   </div>
-                </div>
               ))}
               {filteredTasks.length === 0 && (
                 <div className="p-8 text-center text-muted-foreground">
@@ -1161,7 +1166,7 @@ const TaskPage = () => {
                       key={task._id}
                       draggable
                       onDragStart={() => handleDragStart(task)}
-                      className="p-4 bg-background border border-border hover:border-primary/50 transition-all cursor-move group rounded-lg opacity-100 hover:opacity-95 active:opacity-75"
+                      className={cn("p-4 bg-background border transition-all cursor-move group rounded-lg opacity-100 hover:opacity-95 active:opacity-75", isTaskOverdue(task) ? "border-red-200 bg-red-50" : "border-border hover:border-primary/50")}
                       onClick={() => handleTaskClick(task)}
                     >
                       <div className="flex justify-between items-start mb-3">
@@ -1211,7 +1216,7 @@ const TaskPage = () => {
                       )}>
                         {task.title}
                       </p>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <div className={cn("flex items-center justify-between text-xs", isTaskOverdue(task) ? "text-red-600" : "text-muted-foreground") }>
                         <div className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
                           {formatDate(task.dueDate)}
