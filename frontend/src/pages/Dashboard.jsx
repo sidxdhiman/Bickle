@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { CheckCircle, Clock, Calendar, FileText, TrendingUp, AlertCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { DashboardSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState({
     tasksDue: 0,
     tasksCompleted: 0,
@@ -89,19 +92,7 @@ const Dashboard = () => {
   }, []);
 
   if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto space-y-8">
-        <div className="animate-pulse">
-          <div className="h-8 bg-muted rounded w-1/3 mb-2"></div>
-          <div className="h-4 bg-muted rounded w-1/2"></div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="p-6 rounded-2xl bg-muted animate-pulse h-24"></div>
-          ))}
-        </div>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -112,7 +103,10 @@ const Dashboard = () => {
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group">
+        <div
+          onClick={() => navigate('/tasks')}
+          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+        >
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-muted-foreground">Tasks Due Today</p>
             <Clock className="w-5 h-5 text-muted-foreground" />
@@ -123,7 +117,10 @@ const Dashboard = () => {
           )}
         </div>
 
-        <div className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group">
+        <div
+          onClick={() => navigate('/tasks')}
+          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+        >
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-muted-foreground">Completed Tasks</p>
             <CheckCircle className="w-5 h-5 text-muted-foreground" />
@@ -132,7 +129,10 @@ const Dashboard = () => {
           <p className="text-xs text-green-500 mt-1">Total completed</p>
         </div>
 
-        <div className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group">
+        <div
+          onClick={() => navigate('/calendar')}
+          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+        >
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-muted-foreground">Upcoming Events</p>
             <Calendar className="w-5 h-5 text-muted-foreground" />
@@ -141,7 +141,10 @@ const Dashboard = () => {
           <p className="text-xs text-blue-500 mt-1">Scheduled ahead</p>
         </div>
 
-        <div className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group">
+        <div
+          onClick={() => navigate('/notes')}
+          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+        >
           <div className="flex items-center justify-between mb-2">
             <p className="text-sm text-muted-foreground">Notes</p>
             <FileText className="w-5 h-5 text-muted-foreground" />
@@ -153,14 +156,21 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 p-6 rounded-2xl bg-secondary border border-border">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <h3
+            onClick={() => navigate('/tasks')}
+            className="text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+          >
             <TrendingUp className="w-5 h-5" />
             Recent Tasks
           </h3>
           {recentTasks.length > 0 ? (
             <div className="space-y-3">
               {recentTasks.map((task) => (
-                <div key={task._id} className="flex items-center justify-between p-3 rounded-lg bg-background border border-border">
+                <div
+                  key={task._id}
+                  onClick={() => navigate('/tasks')}
+                  className="flex items-center justify-between p-3 rounded-lg bg-background border border-border cursor-pointer hover:border-primary/50 transition-colors"
+                >
                   <div className="flex items-center gap-3">
                     <div className={cn(
                       "w-3 h-3 rounded-full",
@@ -191,14 +201,21 @@ const Dashboard = () => {
         </div>
 
         <div className="p-6 rounded-2xl bg-secondary border border-border">
-          <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <h3
+            onClick={() => navigate('/calendar')}
+            className="text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+          >
             <Calendar className="w-5 h-5" />
             Upcoming Events
           </h3>
           {upcomingEvents.length > 0 ? (
             <div className="space-y-3">
               {upcomingEvents.map((event) => (
-                <div key={event._id} className="p-3 rounded-lg bg-background border border-border">
+                <div
+                  key={event._id}
+                  onClick={() => navigate('/calendar')}
+                  className="p-3 rounded-lg bg-background border border-border cursor-pointer hover:border-primary/50 transition-colors"
+                >
                   <p className="font-medium">{event.title}</p>
                   <p className="text-sm text-muted-foreground">
                     {new Date(event.start).toLocaleDateString()} at {new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

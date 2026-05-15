@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { TasksSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -894,7 +895,7 @@ const TaskPage = () => {
     setLists(updatedLists.data);
   };
 
-  if (loading) return <div className="h-full flex items-center justify-center text-muted-foreground">Loading tasks...</div>;
+  if (loading) return <TasksSkeleton />;
 
   return (
     <div className="h-full flex flex-col gap-4 sm:gap-6">

@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Settings as SettingsIcon, Palette, Type, AlertTriangle, Trash2, Moon, Sun } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { SettingsSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));

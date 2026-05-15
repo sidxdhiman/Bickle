@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { SleepSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -359,7 +360,7 @@ const Sleep = () => {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-full">Loading...</div>;
+    return <SleepSkeleton />;
   }
 
   return (

@@ -11,6 +11,7 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
+import { CalendarSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -738,7 +739,7 @@ const CalendarPage = () => {
 
       <div className="flex-1 overflow-hidden bg-secondary/50 border border-border rounded-3xl">
         {loading ? (
-          <div className="flex h-full items-center justify-center p-10 text-muted-foreground">Loading calendar...</div>
+          <CalendarSkeleton />
         ) : view === 'month' ? (
           <div className="h-full overflow-auto p-4">
             <div className="grid grid-cols-7 border-b border-border pb-3">

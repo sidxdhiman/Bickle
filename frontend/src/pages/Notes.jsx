@@ -15,21 +15,38 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import axios from 'axios';
+import { NotesSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
 const NotesPage = () => {
-  const [notes, setNotes] = useState([
-    { _id: '1', title: 'Project Bickle Vision', content: 'Build the most intuitive AI-native productivity OS ever.', category: 'Project', isPinned: true },
-    { _id: '2', title: 'Weekly Grocery List', content: 'Milk, Eggs, Bread, Coffee beans.', category: 'Personal', isPinned: false },
-    { _id: '3', title: 'Meeting Notes: Q2 Roadmap', content: 'Focus on the Tasks and Calendar sync first. ThenNotes.', category: 'Work', isPinned: false },
-  ]);
-  const [activeNote, setActiveNote] = useState(notes[0]);
+  const [notes, setNotes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeNote, setActiveNote] = useState(null);
   const [categories, setCategories] = useState(['General', 'Work', 'Personal', 'Project']);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    const fetchNotes = async () => {
+      try {
+        const response = await axios.get('/notes');
+        setNotes(response.data);
+        if (response.data.length > 0) {
+          setActiveNote(response.data[0]);
+        }
+      } catch (error) {
+        console.error('Failed to fetch notes:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNotes();
+  }, []);
 
   const filteredNotes = notes.filter(note => {
     const matchesCategory = selectedCategory === 'All' || note.category === selectedCategory;
@@ -37,6 +54,10 @@ const NotesPage = () => {
                            note.content.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
+
+  if (loading) {
+    return <NotesSkeleton />;
+  }
 
   return (
     <div className="h-full flex flex-col gap-6">
