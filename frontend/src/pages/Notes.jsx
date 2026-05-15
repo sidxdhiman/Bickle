@@ -11,7 +11,10 @@ import {
   Italic,
   List,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  Edit2,
+  X,
+  Check
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -22,30 +25,92 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+// Add/Edit Category Modal
+const CategoryModal = ({ isOpen, onClose, onSave, initialName = '', isEdit = false }) => {
+  const [categoryName, setCategoryName] = useState(initialName);
+
+  useEffect(() => {
+    setCategoryName(initialName);
+  }, [initialName, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSave = () => {
+    if (categoryName.trim()) {
+      onSave(categoryName.trim());
+      setCategoryName('');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-background border border-border rounded-lg p-6 shadow-2xl max-w-sm w-full mx-4">
+        <h2 className="text-xl font-semibold text-foreground mb-4">
+          {isEdit ? 'Edit Category' : 'Add Category'}
+        </h2>
+        <input
+          type="text"
+          value={categoryName}
+          onChange={(e) => setCategoryName(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSave()}
+          placeholder="Category name"
+          className="w-full px-3 py-2 bg-secondary border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary mb-4"
+          autoFocus
+        />
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!categoryName.trim()}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Check className="w-4 h-4" />
+            {isEdit ? 'Update' : 'Add'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const NotesPage = () => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeNote, setActiveNote] = useState(null);
-  const [categories, setCategories] = useState(['General', 'Work', 'Personal', 'Project']);
+  const [categories, setCategories] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null);
 
   useEffect(() => {
-    const fetchNotes = async () => {
+    const fetchData = async () => {
       try {
-        const response = await axios.get('/notes');
-        setNotes(response.data);
-        if (response.data.length > 0) {
-          setActiveNote(response.data[0]);
+        const [notesRes, categoriesRes] = await Promise.all([
+          axios.get('/notes'),
+          axios.get('/notes/categories')
+        ]);
+        
+        setNotes(notesRes.data);
+        if (notesRes.data.length > 0) {
+          setActiveNote(notesRes.data[0]);
         }
+        
+        setCategories(categoriesRes.data || []);
       } catch (error) {
-        console.error('Failed to fetch notes:', error);
+        console.error('Failed to fetch data:', error);
+        setCategories([]);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchNotes();
+    fetchData();
   }, []);
 
   const filteredNotes = notes.filter(note => {
@@ -55,12 +120,121 @@ const NotesPage = () => {
     return matchesCategory && matchesSearch;
   });
 
+  const handleAddCategory = async (categoryName) => {
+    try {
+      const response = await axios.post('/notes/categories', { name: categoryName });
+      setCategories([...categories, response.data]);
+      setShowCategoryModal(false);
+    } catch (error) {
+      console.error('Failed to add category:', error);
+      alert('Failed to add category');
+    }
+  };
+
+  const handleEditCategory = async (oldName, newName) => {
+    try {
+      await axios.put(`/notes/categories/${oldName}`, { name: newName });
+      setCategories(categories.map(cat => cat === oldName ? newName : cat));
+      setEditingCategory(null);
+      setShowCategoryModal(false);
+    } catch (error) {
+      console.error('Failed to edit category:', error);
+      alert('Failed to edit category');
+    }
+  };
+
+  const handleDeleteCategory = async (categoryName) => {
+    if (window.confirm(`Delete category "${categoryName}"?`)) {
+      try {
+        await axios.delete(`/notes/categories/${categoryName}`);
+        setCategories(categories.filter(cat => cat !== categoryName));
+        if (selectedCategory === categoryName) {
+          setSelectedCategory('All');
+        }
+      } catch (error) {
+        console.error('Failed to delete category:', error);
+        alert('Failed to delete category');
+      }
+    }
+  };
+
+  const handleCreateNote = async () => {
+    try {
+      const newNote = {
+        title: 'Untitled Note',
+        content: '',
+        category: selectedCategory !== 'All' ? selectedCategory : (categories[0] || 'General'),
+        isPinned: false
+      };
+      const response = await axios.post('/notes', newNote);
+      setNotes([response.data, ...notes]);
+      setActiveNote(response.data);
+    } catch (error) {
+      console.error('Failed to create note:', error);
+      alert('Failed to create note');
+    }
+  };
+
+  const handleSaveNote = async () => {
+    if (!activeNote) return;
+    try {
+      await axios.put(`/notes/${activeNote._id}`, activeNote);
+      setNotes(notes.map(n => n._id === activeNote._id ? activeNote : n));
+    } catch (error) {
+      console.error('Failed to save note:', error);
+      alert('Failed to save note');
+    }
+  };
+
+  const handleDeleteNote = async () => {
+    if (!activeNote) return;
+    if (window.confirm('Delete this note?')) {
+      try {
+        await axios.delete(`/notes/${activeNote._id}`);
+        const newNotes = notes.filter(n => n._id !== activeNote._id);
+        setNotes(newNotes);
+        setActiveNote(newNotes.length > 0 ? newNotes[0] : null);
+      } catch (error) {
+        console.error('Failed to delete note:', error);
+        alert('Failed to delete note');
+      }
+    }
+  };
+
+  const handlePinNote = async () => {
+    if (!activeNote) return;
+    try {
+      const updated = { ...activeNote, isPinned: !activeNote.isPinned };
+      await axios.put(`/notes/${activeNote._id}`, updated);
+      setActiveNote(updated);
+      setNotes(notes.map(n => n._id === activeNote._id ? updated : n));
+    } catch (error) {
+      console.error('Failed to pin note:', error);
+    }
+  }
+
   if (loading) {
     return <NotesSkeleton />;
   }
 
   return (
     <div className="h-full flex flex-col gap-6">
+      <CategoryModal
+        isOpen={showCategoryModal}
+        onClose={() => {
+          setShowCategoryModal(false);
+          setEditingCategory(null);
+        }}
+        onSave={(name) => {
+          if (editingCategory) {
+            handleEditCategory(editingCategory, name);
+          } else {
+            handleAddCategory(name);
+          }
+        }}
+        initialName={editingCategory || ''}
+        isEdit={!!editingCategory}
+      />
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold tracking-tight">Notes</h1>
@@ -76,7 +250,10 @@ const NotesPage = () => {
           </div>
         </div>
 
-        <button className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:opacity-90 transition-opacity">
+        <button
+          onClick={handleCreateNote}
+          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:opacity-90 transition-opacity"
+        >
           <Plus className="w-4 h-4" />
           New Note
         </button>
@@ -86,9 +263,21 @@ const NotesPage = () => {
         {/* Folders Sidebar */}
         <div className="w-64 flex flex-col gap-4 shrink-0">
           <div className="p-4 rounded-2xl bg-secondary border border-border">
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Folder className="w-3 h-3" /> Categories
-            </h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Folder className="w-3 h-3" /> Categories
+              </h3>
+              <button
+                onClick={() => {
+                  setEditingCategory(null);
+                  setShowCategoryModal(true);
+                }}
+                className="p-1 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground"
+                title="Add category"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+            </div>
             <div className="space-y-1">
               <button
                 onClick={() => setSelectedCategory('All')}
@@ -99,18 +288,47 @@ const NotesPage = () => {
               >
                 All Notes
               </button>
-              {categories.map(cat => (
-                <button
-                  key={cat}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={cn(
-                    "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
-                    selectedCategory === cat ? "bg-primary text-white" : "text-muted-foreground hover:bg-accent hover:text-foreground"
-                  )}
-                >
-                  {cat}
-                </button>
-              ))}
+              {categories.length === 0 ? (
+                <div className="text-xs text-muted-foreground italic p-3 text-center">
+                  No categories yet. Add one to get started.
+                </div>
+              ) : (
+                categories.map(cat => (
+                  <div
+                    key={cat}
+                    className={cn(
+                      "group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                      selectedCategory === cat ? "bg-primary text-white" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
+                  >
+                    <button
+                      onClick={() => setSelectedCategory(cat)}
+                      className="flex-1 text-left"
+                    >
+                      {cat}
+                    </button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => {
+                          setEditingCategory(cat);
+                          setShowCategoryModal(true);
+                        }}
+                        className="p-1 hover:bg-accent/50 rounded transition-colors"
+                        title="Edit category"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(cat)}
+                        className="p-1 hover:bg-red-500/20 rounded transition-colors hover:text-red-500"
+                        title="Delete category"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -160,13 +378,27 @@ const NotesPage = () => {
                   </button>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
+                  <button
+                    onClick={handlePinNote}
+                    className={cn(
+                      "p-2 rounded-md transition-colors",
+                      activeNote?.isPinned
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground hover:bg-accent"
+                    )}
+                  >
                     <Pin className="w-4 h-4" />
                   </button>
-                  <button className="p-2 rounded-md hover:bg-accent text-destructive transition-colors">
+                  <button
+                    onClick={handleDeleteNote}
+                    className="p-2 rounded-md hover:bg-accent text-destructive transition-colors"
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  <button className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 hover:opacity-90 transition-all">
+                  <button
+                    onClick={handleSaveNote}
+                    className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 hover:opacity-90 transition-all"
+                  >
                     <Save className="w-3 h-3" />
                     Save
                   </button>
@@ -177,9 +409,19 @@ const NotesPage = () => {
                   type="text"
                   value={activeNote.title}
                   onChange={(e) => setActiveNote({...activeNote, title: e.target.value})}
-                  className="bg-transparent text-4xl font-bold outline-none mb-6 placeholder:text-muted-foreground"
+                  className="bg-transparent text-4xl font-bold outline-none mb-2 placeholder:text-muted-foreground"
                   placeholder="Note Title"
                 />
+                <select
+                  value={activeNote.category || ''}
+                  onChange={(e) => setActiveNote({...activeNote, category: e.target.value})}
+                  className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm mb-6 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="" disabled>Select a category</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
                 <textarea
                   value={activeNote.content}
                   onChange={(e) => setActiveNote({...activeNote, content: e.target.value})}

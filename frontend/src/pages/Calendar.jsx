@@ -741,16 +741,17 @@ const CalendarPage = () => {
         {loading ? (
           <CalendarSkeleton />
         ) : view === 'month' ? (
-          <div className="h-full overflow-auto p-4">
-            <div className="grid grid-cols-7 border-b border-border pb-3">
+          <div className="h-full flex flex-col p-4">
+            <div className="sticky top-0 z-10 grid grid-cols-7 border-b border-border pb-3 bg-secondary/50">
               {days.map((day) => (
                 <div key={day} className="py-3 text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   {day}
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-px bg-border">
-              {buildMonthGrid(currentDate).map((date) => {
+            <div className="overflow-auto flex-1">
+              <div className="grid grid-cols-7 gap-px bg-border">
+                {buildMonthGrid(currentDate).map((date) => {
                 const inCurrentMonth = date.getMonth() === currentDate.getMonth();
                 const dayEvents = getItemsForDate(date);
                 const isToday = isSameDay(date, today);
@@ -800,6 +801,7 @@ const CalendarPage = () => {
                   </button>
                 );
               })}
+            </div>
             </div>
           </div>
         ) : view === 'week' ? (
