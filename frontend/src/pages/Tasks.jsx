@@ -1166,7 +1166,7 @@ const TaskPage = () => {
                       key={task._id}
                       draggable
                       onDragStart={() => handleDragStart(task)}
-                      className={cn("p-4 bg-background border transition-all cursor-move group rounded-lg opacity-100 hover:opacity-95 active:opacity-75", isTaskOverdue(task) ? "border-red-200 bg-red-50" : "border-border hover:border-primary/50")}
+                      className={cn("p-4 bg-background border transition-all cursor-move group rounded-lg opacity-100 hover:opacity-95 active:opacity-75", isTaskOverdue(task) ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20" : "border-border hover:border-primary/50")}
                       onClick={() => handleTaskClick(task)}
                     >
                       <div className="flex justify-between items-start mb-3">

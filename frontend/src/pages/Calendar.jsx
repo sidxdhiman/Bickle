@@ -493,7 +493,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd }) => {
                         <p className="font-semibold text-foreground">{item.title}</p>
                         <p className="text-xs text-muted-foreground truncate">{item.description || 'No description'}</p>
                       </div>
-                      <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-800">
+                      <span className="rounded-full bg-yellow-100 dark:bg-yellow-900/20 px-3 py-1 text-xs font-semibold text-yellow-800 dark:text-yellow-200">
                         Due {new Date(item.dueDate).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
@@ -760,8 +760,8 @@ const CalendarPage = () => {
                     type="button"
                     onClick={() => openDayDetails(date)}
                     className={cn(
-                      'min-h-[130px] w-full overflow-hidden bg-background p-3 text-left transition-colors',
-                      !inCurrentMonth && 'bg-slate-300 text-slate-600',
+                      'min-h-[100px] w-full overflow-hidden bg-background p-3 text-left transition-colors',
+                      !inCurrentMonth && 'bg-muted/50 text-muted-foreground',
                       isToday && 'ring-2 ring-primary/50 bg-primary/5',
                       'hover:bg-accent/40'
                     )}
@@ -772,7 +772,7 @@ const CalendarPage = () => {
                       </span>
                       <div className="flex items-center gap-1">
                         {dueTasks.length > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-800">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 dark:bg-yellow-900/20 px-2 py-0.5 text-[10px] font-semibold text-yellow-800 dark:text-yellow-200">
                             <AlertCircle className="w-3 h-3" />
                             {dueTasks.length}
                           </span>
@@ -821,7 +821,7 @@ const CalendarPage = () => {
                       </div>
                       <div className="flex items-center gap-2">
                         {dueTasks.length > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-semibold text-yellow-800">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 dark:bg-yellow-900/20 px-2 py-0.5 text-[10px] font-semibold text-yellow-800 dark:text-yellow-200">
                             <AlertCircle className="w-3 h-3" />
                             {dueTasks.length}
                           </span>

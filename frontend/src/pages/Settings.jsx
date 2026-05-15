@@ -37,6 +37,7 @@ const Settings = () => {
   const applyTheme = (newTheme) => {
     const root = document.documentElement;
     if (newTheme === 'light') {
+      root.classList.remove('dark');
       root.style.setProperty('--background', '0 0% 100%');
       root.style.setProperty('--foreground', '240 10% 3.9%');
       root.style.setProperty('--border', '240 5.9% 90%');
@@ -53,6 +54,7 @@ const Settings = () => {
       root.style.setProperty('--destructive', '0 84.2% 60.2%');
       root.style.setProperty('--destructive-foreground', '0 0% 98%');
     } else {
+      root.classList.add('dark');
       root.style.setProperty('--background', '240 10% 3.9%');
       root.style.setProperty('--foreground', '0 0% 98%');
       root.style.setProperty('--border', '240 3.7% 15.9%');
