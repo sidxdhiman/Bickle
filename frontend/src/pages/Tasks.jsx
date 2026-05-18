@@ -40,13 +40,22 @@ const isTaskOverdue = (task) => {
   return due < new Date();
 };
 
-const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
+const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListId = '' }) => {
+  const getDefaultStatusForList = (listId) => {
+    const list = lists.find(l => l._id === listId);
+    return list?.statuses?.[0]?.id || 'todo';
+  };
+
+  const getInitialListId = () => {
+    return task?.list || defaultListId || lists[0]?._id || '';
+  };
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
-    list: lists.length > 0 ? lists[0]._id : '',
+    list: getInitialListId(),
     priority: 'medium',
-    status: 'todo',
+    status: getDefaultStatusForList(getInitialListId()),
     dueDate: '',
     tags: []
   });
@@ -57,10 +66,6 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
     statusOptions = [{ id: 'unassigned', label: '-' }, ...statusOptions];
   }
 
-  const getDefaultStatusForList = (listId) => {
-    const list = lists.find(l => l._id === listId);
-    return list?.statuses?.[0]?.id || 'todo';
-  };
 
   const handleListChange = (e) => {
     const selectedListId = e.target.value;
@@ -73,6 +78,8 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
   };
 
   useEffect(() => {
+    if (!isOpen) return;
+
     if (task) {
       setFormData({
         title: task.title || '',
@@ -83,17 +90,20 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
         tags: task.tags || []
       });
-    } else if (lists.length > 0) {
-      const defaultListId = formData.list || lists[0]._id;
-      setFormData(prev => ({
-        ...prev,
-        list: defaultListId,
-        status: prev.status && statusOptions.some(status => status.id === prev.status)
-          ? prev.status
-          : getDefaultStatusForList(defaultListId),
-      }));
+    } else {
+      const initialList = defaultListId || lists[0]?._id || '';
+      setFormData({
+        title: '',
+        description: '',
+        list: initialList,
+        priority: 'medium',
+        status: getDefaultStatusForList(initialList),
+        dueDate: '',
+        tags: []
+      });
     }
-  }, [task, lists]);
+  }, [isOpen, task, lists, defaultListId]);
+
 
   if (!isOpen) return null;
 
@@ -101,13 +111,13 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null }) => {
     e.preventDefault();
     onSubmit(formData);
     if (!task) {
-      const defaultListId = lists[0]?._id || '';
+      const resetListId = defaultListId || lists[0]?._id || '';
       setFormData({
         title: '',
         description: '',
-        list: defaultListId,
+        list: resetListId,
         priority: 'medium',
-        status: getDefaultStatusForList(defaultListId),
+        status: getDefaultStatusForList(resetListId),
         dueDate: '',
         tags: []
       });
@@ -731,6 +741,8 @@ const TaskPage = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [editingTask, setEditingTask] = useState(null);
   const [editingList, setEditingList] = useState(null);
+  const [contextMenuTask, setContextMenuTask] = useState(null);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState(null);
 
@@ -895,6 +907,52 @@ const TaskPage = () => {
     setLists(updatedLists.data);
   };
 
+  const getDefaultStatusForList = (listId) => {
+    const list = lists.find(l => l._id === listId);
+    return list?.statuses?.[0]?.id || 'todo';
+  };
+
+  const openNewTaskModal = () => {
+    setEditingTask(null);
+    setIsModalOpen(true);
+  };
+
+  const handleTaskContextMenu = (e, task) => {
+    e.preventDefault();
+    setContextMenuTask(task);
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  const closeContextMenu = () => {
+    setContextMenuTask(null);
+  };
+
+  useEffect(() => {
+    if (!contextMenuTask) return;
+    const handleClick = () => closeContextMenu();
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenuTask]);
+
+  const handleMoveTask = async (task, listId) => {
+    if (!task || task.list === listId) {
+      closeContextMenu();
+      return;
+    }
+    const status = getDefaultStatusForList(listId);
+    try {
+      const res = await axios.put(`/tasks/${task._id}`, { list: listId, status });
+      setTasks(prev => prev.map(t => t._id === task._id ? res.data : t));
+      if (selectedTask?._id === task._id) {
+        setSelectedTask(res.data);
+      }
+    } catch (error) {
+      console.error('Error moving task:', error);
+    } finally {
+      closeContextMenu();
+    }
+  };
+
   if (loading) return <TasksSkeleton />;
 
   return (
@@ -908,6 +966,7 @@ const TaskPage = () => {
         onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
         lists={lists}
         task={editingTask}
+        defaultListId={selectedList === 'all' ? lists[0]?._id : selectedList}
       />
 
       <TaskDetailModal
@@ -1000,7 +1059,7 @@ const TaskPage = () => {
               </button>
             </div>
             <button
-              onClick={() => setIsModalOpen(true)}
+              onClick={openNewTaskModal}
               className="bg-primary text-primary-foreground px-3 sm:px-4 py-2 flex items-center gap-2 font-medium hover:opacity-90 transition-opacity text-sm sm:text-base"
             >
               <Plus className="w-4 h-4" />
@@ -1022,7 +1081,7 @@ const TaskPage = () => {
             </div>
             <div className="divide-y divide-border overflow-y-auto flex-1">
               {filteredTasks.map(task => (
-                <div key={task._id} className="grid grid-cols-12 gap-4 px-4 sm:px-6 py-4 items-center hover:bg-accent/50 transition-colors group cursor-pointer" onClick={() => handleTaskClick(task)}>
+                <div key={task._id} className="grid grid-cols-12 gap-4 px-4 sm:px-6 py-4 items-center hover:bg-accent/50 transition-colors group cursor-pointer" onContextMenu={(e) => handleTaskContextMenu(e, task)} onClick={() => handleTaskClick(task)}>
                   <div className="col-span-4 sm:col-span-5 flex flex-col gap-2">
                     <div className="flex items-center gap-3">
                       <button
@@ -1167,6 +1226,7 @@ const TaskPage = () => {
                       key={task._id}
                       draggable
                       onDragStart={() => handleDragStart(task)}
+                      onContextMenu={(e) => handleTaskContextMenu(e, task)}
                       className={cn("p-4 bg-background border transition-all cursor-move group rounded-lg opacity-100 hover:opacity-95 active:opacity-75", isTaskOverdue(task) ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20" : "border-border hover:border-primary/50")}
                       onClick={() => handleTaskClick(task)}
                     >
@@ -1230,7 +1290,7 @@ const TaskPage = () => {
                     </div>
                   ))}
                   <button
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={openNewTaskModal}
                     className="w-full py-3 border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all flex items-center justify-center gap-2 text-sm bg-secondary/50 rounded-lg"
                   >
                     <Plus className="w-4 h-4" />
@@ -1242,6 +1302,28 @@ const TaskPage = () => {
             )}
           </div>
         )}
+      {contextMenuTask && (
+        <div
+          style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
+          className="fixed z-50 w-56 rounded-lg border border-border bg-background shadow-2xl"
+        >
+          <div className="p-3 border-b border-border text-sm font-semibold">Move task to</div>
+          <div className="flex flex-col p-2 gap-1">
+            {lists.filter(list => list._id !== contextMenuTask.list).map(list => (
+              <button
+                key={list._id}
+                onClick={() => handleMoveTask(contextMenuTask, list._id)}
+                className="text-left rounded-md px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
+              >
+                {list.name}
+              </button>
+            ))}
+            {lists.filter(list => list._id !== contextMenuTask.list).length === 0 && (
+              <div className="px-3 py-2 text-sm text-muted-foreground">No other lists available.</div>
+            )}
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
