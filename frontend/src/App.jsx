@@ -11,6 +11,11 @@ import Settings from './pages/Settings';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
+const storedToken = localStorage.getItem('token');
+if (storedToken) {
+  axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+}
+
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState(null);
@@ -19,24 +24,28 @@ const App = () => {
     const autoLogin = async () => {
       try {
         const credentials = { email: 'dev@bickle.com', password: 'password', username: 'devuser' };
-        let token = null;
+        let token = localStorage.getItem('token');
 
-        try {
-          // Try to login first
-          const res = await axios.post('/auth/login', { email: credentials.email, password: credentials.password });
-          token = res.data.token;
-        } catch (err) {
-          // If login fails, register the user
-          const res = await axios.post('/auth/register', credentials);
-          token = res.data.token;
+        if (!token) {
+          try {
+            // Try to login first
+            const res = await axios.post('/auth/login', { email: credentials.email, password: credentials.password });
+            token = res.data.token;
+          } catch (err) {
+            // If login fails, register the user
+            const res = await axios.post('/auth/register', credentials);
+            token = res.data.token;
+          }
         }
 
         if (token) {
+          localStorage.setItem('token', token);
           axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           setIsAuthenticated(true);
         }
       } catch (err) {
         console.error('Auto-login failed:', err);
+        localStorage.removeItem('token');
         setError('Failed to connect to the backend. Please ensure the backend server is running.');
       }
     };

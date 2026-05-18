@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Plus,
   Search,
@@ -87,24 +87,73 @@ const NotesPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
+  const textAreaRef = useRef(null);
+
+  const getSelection = () => {
+    const textarea = textAreaRef.current;
+    if (!textarea) return null;
+    return {
+      textarea,
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd,
+      value: textarea.value,
+    };
+  };
+
+  const updateNoteContent = (newContent, cursorPosition) => {
+    setActiveNote(prev => ({ ...prev, content: newContent }));
+    requestAnimationFrame(() => {
+      if (!textAreaRef.current) return;
+      textAreaRef.current.focus();
+      if (cursorPosition !== undefined) {
+        textAreaRef.current.selectionStart = cursorPosition;
+        textAreaRef.current.selectionEnd = cursorPosition;
+      }
+    });
+  };
+
+  const wrapSelection = (wrapper, suffix = wrapper) => {
+    const selection = getSelection();
+    if (!selection) return;
+    const { textarea, selectionStart, selectionEnd, value } = selection;
+    const selectedText = value.slice(selectionStart, selectionEnd) || 'text';
+    const wrappedText = `${wrapper}${selectedText}${suffix}`;
+    const updatedContent = `${value.slice(0, selectionStart)}${wrappedText}${value.slice(selectionEnd)}`;
+    updateNoteContent(updatedContent, selectionStart + wrappedText.length);
+  };
+
+  const applyListFormatting = () => {
+    const selection = getSelection();
+    if (!selection) return;
+    const { selectionStart, selectionEnd, value } = selection;
+    const selectedText = value.slice(selectionStart, selectionEnd) || 'List item';
+    const lines = selectedText.split('\n').map(line => line.trim().startsWith('- ') ? line : `- ${line}`);
+    const formattedText = lines.join('\n');
+    const updatedContent = `${value.slice(0, selectionStart)}${formattedText}${value.slice(selectionEnd)}`;
+    updateNoteContent(updatedContent, selectionStart + formattedText.length);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [notesRes, categoriesRes] = await Promise.all([
-          axios.get('/notes'),
-          axios.get('/notes/categories')
-        ]);
-        
+        const notesRes = await axios.get('/notes');
         setNotes(notesRes.data);
         if (notesRes.data.length > 0) {
           setActiveNote(notesRes.data[0]);
         }
-        
-        setCategories(categoriesRes.data || []);
+
+        try {
+          const categoriesRes = await axios.get('/notes/categories');
+          const loadedCategories = categoriesRes.data || [];
+          setCategories(loadedCategories.length > 0 ? loadedCategories : ['General']);
+        } catch (categoryError) {
+          console.warn('Failed to load categories from backend, using note categories fallback:', categoryError);
+          const noteCategories = [...new Set(notesRes.data.map(note => note.category).filter(Boolean))];
+          setCategories(noteCategories.length > 0 ? noteCategories : ['General']);
+        }
       } catch (error) {
-        console.error('Failed to fetch data:', error);
-        setCategories([]);
+        console.error('Failed to fetch notes data:', error);
+        setCategories(['General']);
       } finally {
         setLoading(false);
       }
@@ -123,10 +172,16 @@ const NotesPage = () => {
   const handleAddCategory = async (categoryName) => {
     try {
       const response = await axios.post('/notes/categories', { name: categoryName });
-      setCategories([...categories, response.data]);
+      const newCategory = response.data || categoryName;
+      setCategories(prev => [...new Set([...prev, newCategory])]);
       setShowCategoryModal(false);
     } catch (error) {
       console.error('Failed to add category:', error);
+      if (error.response?.status === 404) {
+        setCategories(prev => [...new Set([...prev, categoryName])]);
+        setShowCategoryModal(false);
+        return;
+      }
       alert('Failed to add category');
     }
   };
@@ -367,13 +422,13 @@ const NotesPage = () => {
             <>
               <div className="p-4 border-b border-border flex items-center justify-between bg-background/20 backdrop-blur-sm">
                 <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
+                  <button type="button" onClick={() => wrapSelection('**')} className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
                     <Bold className="w-4 h-4" />
                   </button>
-                  <button className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
+                  <button type="button" onClick={() => wrapSelection('_')} className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
                     <Italic className="w-4 h-4" />
                   </button>
-                  <button className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
+                  <button type="button" onClick={applyListFormatting} className="p-2 rounded-md hover:bg-accent text-muted-foreground transition-colors">
                     <List className="w-4 h-4" />
                   </button>
                 </div>
@@ -423,6 +478,7 @@ const NotesPage = () => {
                   ))}
                 </select>
                 <textarea
+                  ref={textAreaRef}
                   value={activeNote.content}
                   onChange={(e) => setActiveNote({...activeNote, content: e.target.value})}
                   className="bg-transparent flex-1 resize-none outline-none text-lg leading-relaxed text-foreground/80 placeholder:text-muted-foreground"
