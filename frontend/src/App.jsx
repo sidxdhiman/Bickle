@@ -8,6 +8,7 @@ import Calendar from './pages/Calendar';
 import Notes from './pages/Notes';
 import Sleep from './pages/Sleep';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -18,47 +19,39 @@ if (storedToken) {
 
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const autoLogin = async () => {
-      try {
-        const credentials = { email: 'dev@bickle.com', password: 'password', username: 'devuser' };
-        let token = localStorage.getItem('token');
+    const unlocked = localStorage.getItem('authUnlocked') === 'true';
+    const token = localStorage.getItem('token');
 
-        if (!token) {
-          try {
-            // Try to login first
-            const res = await axios.post('/auth/login', { email: credentials.email, password: credentials.password });
-            token = res.data.token;
-          } catch (err) {
-            // If login fails, register the user
-            const res = await axios.post('/auth/register', credentials);
-            token = res.data.token;
-          }
-        }
+    if (unlocked && token) {
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      setIsAuthenticated(true);
+    } else {
+      localStorage.removeItem('authUnlocked');
+    }
 
-        if (token) {
-          localStorage.setItem('token', token);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          setIsAuthenticated(true);
-        }
-      } catch (err) {
-        console.error('Auto-login failed:', err);
-        localStorage.removeItem('token');
-        setError('Failed to connect to the backend. Please ensure the backend server is running.');
-      }
-    };
-
-    autoLogin();
+    setHasCheckedAuth(true);
   }, []);
 
   if (error) {
     return <div className="flex h-screen items-center justify-center bg-background text-destructive p-4 text-center">{error}</div>;
   }
 
+  if (!hasCheckedAuth) {
+    return <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">Loading...</div>;
+  }
+
   if (!isAuthenticated) {
-    return <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">Authenticating...</div>;
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/*" element={<Login onAuthSuccess={() => setIsAuthenticated(true)} />} />
+        </Routes>
+      </BrowserRouter>
+    );
   }
 
   return (

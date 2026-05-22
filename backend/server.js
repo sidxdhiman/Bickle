@@ -24,11 +24,47 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
+const startServer = async () => {
+  let mongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bickle';
+
+  if (!process.env.MONGODB_URI) {
+    console.warn('Warning: MONGODB_URI is not set. Trying mongodb://127.0.0.1:27017/bickle first.');
+  }
+
+  try {
+    await mongoose.connect(mongoURI);
     console.log('Connected to MongoDB');
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-    });
-  })
-  .catch(err => console.error('MongoDB connection error:', err));
+    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    return;
+  } catch (err) {
+    console.error('MongoDB connection error:', err.message || err);
+    // If in development, fallback to an in-memory MongoDB
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        console.warn('Local MongoDB not available — starting in-memory MongoDB for development.');
+        const { MongoMemoryServer } = require('mongodb-memory-server');
+        const mongod = await MongoMemoryServer.create();
+        const memUri = mongod.getUri();
+        await mongoose.connect(memUri);
+        console.log('Connected to in-memory MongoDB');
+        app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+        // stop in-memory server on exit
+        const cleanExit = async () => {
+          await mongoose.disconnect();
+          await mongod.stop();
+          process.exit(0);
+        };
+        process.on('SIGINT', cleanExit);
+        process.on('SIGTERM', cleanExit);
+        return;
+      } catch (memErr) {
+        console.error('In-memory MongoDB failed to start:', memErr);
+        process.exit(1);
+      }
+    }
+
+    process.exit(1);
+  }
+};
+
+startServer();

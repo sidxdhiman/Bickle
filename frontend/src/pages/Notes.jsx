@@ -6,7 +6,8 @@ import {
   Trash2,
   Pin,
   Folder,
-  Save,
+  Cloud,
+  Loader2,
   Bold,
   Italic,
   List,
@@ -88,6 +89,8 @@ const NotesPage = () => {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const textAreaRef = useRef(null);
+  const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
+  const [categoryToDelete, setCategoryToDelete] = useState(null);
 
   const getSelection = () => {
     const textarea = textAreaRef.current;
@@ -199,18 +202,9 @@ const NotesPage = () => {
   };
 
   const handleDeleteCategory = async (categoryName) => {
-    if (window.confirm(`Delete category "${categoryName}"?`)) {
-      try {
-        await axios.delete(`/notes/categories/${categoryName}`);
-        setCategories(categories.filter(cat => cat !== categoryName));
-        if (selectedCategory === categoryName) {
-          setSelectedCategory('All');
-        }
-      } catch (error) {
-        console.error('Failed to delete category:', error);
-        alert('Failed to delete category');
-      }
-    }
+    // open a modal to choose how to handle notes in the category
+    setCategoryToDelete(categoryName);
+    setShowDeleteCategoryModal(true);
   };
 
   const handleCreateNote = async () => {
@@ -240,6 +234,35 @@ const NotesPage = () => {
       alert('Failed to save note');
     }
   };
+
+  // Autosave logic
+  const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved
+  const saveTimer = useRef(null);
+
+  const saveActiveNote = async (note) => {
+    if (!note || !note._id) return;
+    setSaveStatus('saving');
+    try {
+      const res = await axios.put(`/notes/${note._id}`, note);
+      setNotes(prev => prev.map(n => n._id === note._id ? res.data : n));
+      setActiveNote(res.data);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 1200);
+    } catch (err) {
+      console.error('Autosave failed:', err);
+      setSaveStatus('idle');
+    }
+  };
+
+  useEffect(() => {
+    if (!activeNote) return;
+    // debounce saves: wait 1000ms after last change
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => saveActiveNote(activeNote), 1000);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [activeNote?.title, activeNote?.content, activeNote?.category, activeNote?._id]);
 
   const handleDeleteNote = async () => {
     if (!activeNote) return;
@@ -274,6 +297,77 @@ const NotesPage = () => {
 
   return (
     <div className="h-full flex flex-col gap-6">
+      {/* Delete Category Modal */}
+      {showDeleteCategoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-background border border-border rounded-lg p-6 shadow-2xl max-w-lg w-full mx-4">
+            <h2 className="text-lg font-semibold mb-3">Delete category "{categoryToDelete}"</h2>
+            <p className="text-sm text-muted-foreground mb-4">This category contains notes. Choose how to handle those notes:</p>
+            <div className="flex gap-3 mb-4">
+              <button
+                onClick={async () => {
+                  // Delete notes in category
+                  const notesInCat = notes.filter(n => n.category === categoryToDelete);
+                  try {
+                    await Promise.all(notesInCat.map(n => axios.delete(`/notes/${n._id}`)));
+                    await axios.delete(`/notes/categories/${categoryToDelete}`);
+                    setNotes(prev => prev.filter(n => n.category !== categoryToDelete));
+                    setCategories(prev => prev.filter(c => c !== categoryToDelete));
+                    setSelectedCategory('All');
+                    setShowDeleteCategoryModal(false);
+                    setCategoryToDelete(null);
+                    if (activeNote && activeNote.category === categoryToDelete) {
+                      setActiveNote(null);
+                    }
+                  } catch (err) {
+                    console.error('Failed to delete notes/category:', err);
+                    alert('Failed to delete notes or category');
+                  }
+                }}
+                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg"
+              >
+                Delete notes
+              </button>
+              <div className="flex items-center gap-2">
+                <select id="move-target" className="px-3 py-2 border border-border rounded-lg bg-secondary text-foreground">
+                  {categories.filter(c => c !== categoryToDelete).map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={async () => {
+                    const sel = document.getElementById('move-target');
+                    const target = sel?.value;
+                    if (!target) return alert('Select a target category');
+                    const notesInCat = notes.filter(n => n.category === categoryToDelete);
+                    try {
+                      await Promise.all(notesInCat.map(n => axios.put(`/notes/${n._id}`, { ...n, category: target })));
+                      await axios.delete(`/notes/categories/${categoryToDelete}`);
+                      setNotes(prev => prev.map(n => n.category === categoryToDelete ? { ...n, category: target } : n));
+                      setCategories(prev => prev.filter(c => c !== categoryToDelete));
+                      setSelectedCategory('All');
+                      setShowDeleteCategoryModal(false);
+                      setCategoryToDelete(null);
+                      if (activeNote && activeNote.category === categoryToDelete) {
+                        setActiveNote({ ...activeNote, category: target });
+                      }
+                    } catch (err) {
+                      console.error('Failed to move notes/category:', err);
+                      alert('Failed to move notes or delete category');
+                    }
+                  }}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
+                >
+                  Move notes
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setShowDeleteCategoryModal(false); setCategoryToDelete(null); }} className="px-4 py-2 bg-secondary rounded-lg">Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       <CategoryModal
         isOpen={showCategoryModal}
         onClose={() => {
@@ -402,14 +496,17 @@ const NotesPage = () => {
               )}
             >
               <div className="flex justify-between items-start mb-1">
-                <h4 className="font-semibold text-sm truncate pr-4">{note.title}</h4>
+                <span className="text-[10px] text-muted-foreground font-medium mr-2">{note.category}</span>
                 {note.isPinned && <Pin className="w-3 h-3 text-primary" />}
+              </div>
+              <div className="mb-1">
+                <h4 className="font-semibold text-sm truncate pr-4">{note.title}</h4>
               </div>
               <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
                 {note.content}
               </p>
               <div className="flex items-center justify-between text-[10px] text-muted-foreground font-medium">
-                <span>{note.category}</span>
+                <span>{/* placeholder for spacing */}</span>
                 <span>2h ago</span>
               </div>
             </div>
@@ -450,16 +547,33 @@ const NotesPage = () => {
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={handleSaveNote}
-                    className="bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 hover:opacity-90 transition-all"
-                  >
-                    <Save className="w-3 h-3" />
-                    Save
-                  </button>
+                  {/* autosave indicator */}
+                  {saveStatus === 'saving' ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </div>
+                  ) : saveStatus === 'saved' ? (
+                    <div className="flex items-center gap-2 text-sm text-primary">
+                      <Cloud className="w-4 h-4" />
+                      <span>Saved</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-muted-foreground">Autosave idle</div>
+                  )}
                 </div>
               </div>
               <div className="flex-1 flex flex-col p-8 overflow-y-auto">
+                <select
+                  value={activeNote.category || ''}
+                  onChange={(e) => setActiveNote({...activeNote, category: e.target.value})}
+                  className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm mb-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  <option value="" disabled>Select a category</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
                 <input
                   type="text"
                   value={activeNote.title}
@@ -467,16 +581,6 @@ const NotesPage = () => {
                   className="bg-transparent text-4xl font-bold outline-none mb-2 placeholder:text-muted-foreground"
                   placeholder="Note Title"
                 />
-                <select
-                  value={activeNote.category || ''}
-                  onChange={(e) => setActiveNote({...activeNote, category: e.target.value})}
-                  className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm mb-6 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <option value="" disabled>Select a category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
                 <textarea
                   ref={textAreaRef}
                   value={activeNote.content}
