@@ -91,6 +91,11 @@ const NotesPage = () => {
   const textAreaRef = useRef(null);
   const [showDeleteCategoryModal, setShowDeleteCategoryModal] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState(null);
+  const [deleteOrMoveSelection, setDeleteOrMoveSelection] = useState('delete');
+  const notesInCategory = categoryToDelete ? notes.filter(n => n.category === categoryToDelete) : [];
+  const [lastAction, setLastAction] = useState(null);
+  const [showUndoToast, setShowUndoToast] = useState(false);
+  const undoTimerRef = useRef(null);
 
   const getSelection = () => {
     const textarea = textAreaRef.current;
@@ -297,70 +302,121 @@ const NotesPage = () => {
 
   return (
     <div className="h-full flex flex-col gap-6">
+      {/* Undo toast */}
+      {showUndoToast && lastAction && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-card border border-border rounded-lg px-4 py-3 shadow-lg">
+          <div className="text-sm">{lastAction.type === 'delete' ? `Deleted ${lastAction.notes.length} notes` : `Moved ${lastAction.notes.length} notes`}</div>
+          <button
+            onClick={async () => {
+              if (!lastAction) return;
+              if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); }
+              // Try server undo first, but if it fails, fall back to local-only undo
+              if (lastAction.type === 'delete') {
+                try {
+                  const recreated = await Promise.all(lastAction.notes.map(n => axios.post('/notes', { title: n.title, content: n.content || '', category: n.category || lastAction.category || 'General', isPinned: n.isPinned || false })));
+                  const createdNotes = recreated.map(r => r.data);
+                  setNotes(prev => [...createdNotes, ...prev]);
+                } catch (err) {
+                  console.warn('Server undo failed, restoring locally:', err);
+                  // local restore only
+                  setNotes(prev => [...lastAction.notes, ...prev]);
+                }
+              } else if (lastAction.type === 'move') {
+                try {
+                  await Promise.all(lastAction.notes.map(n => axios.put(`/notes/${n._id}`, { category: n.oldCategory })));
+                  setNotes(prev => prev.map(n => {
+                    const found = lastAction.notes.find(x => x._id === n._id);
+                    return found ? { ...n, category: found.oldCategory } : n;
+                  }));
+                } catch (err) {
+                  console.warn('Server undo move failed, restoring locally:', err);
+                  setNotes(prev => prev.map(n => {
+                    const found = lastAction.notes.find(x => x._id === n._id);
+                    return found ? { ...n, category: found.oldCategory } : n;
+                  }));
+                }
+              }
+              setShowUndoToast(false);
+              setLastAction(null);
+            }}
+            className="px-3 py-1 rounded bg-primary text-primary-foreground"
+          >
+            Undo
+          </button>
+        </div>
+      )}
       {/* Delete Category Modal */}
       {showDeleteCategoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="bg-background border border-border rounded-lg p-6 shadow-2xl max-w-lg w-full mx-4">
             <h2 className="text-lg font-semibold mb-3">Delete category "{categoryToDelete}"</h2>
             <p className="text-sm text-muted-foreground mb-4">This category contains notes. Choose how to handle those notes:</p>
-            <div className="flex gap-3 mb-4">
+            <label className="text-sm mb-2 block">Action</label>
+            <div className="flex items-center gap-3 mb-4">
+              <select
+                id="delete-or-move"
+                value={deleteOrMoveSelection}
+                onChange={(e) => setDeleteOrMoveSelection(e.target.value)}
+                className="flex-1 h-10 px-3 border border-border rounded-lg bg-secondary text-foreground"
+              >
+                <option value="delete">Delete notes ({notesInCategory.length})</option>
+                {categories.filter(c => c !== categoryToDelete).map(c => (
+                  <option key={c} value={`move::${c}`}>{`Move to: ${c}`}</option>
+                ))}
+              </select>
+
               <button
                 onClick={async () => {
-                  // Delete notes in category
-                  const notesInCat = notes.filter(n => n.category === categoryToDelete);
+                  const sel = document.getElementById('delete-or-move');
+                  const val = sel?.value;
+                  const notesInCat = notesInCategory.map(n => ({ ...n }));
                   try {
-                    await Promise.all(notesInCat.map(n => axios.delete(`/notes/${n._id}`)));
+                    if (val === 'delete') {
+                      // capture for undo
+                      setLastAction({ type: 'delete', notes: notesInCat, category: categoryToDelete });
+                      await Promise.all(notesInCat.map(n => axios.delete(`/notes/${n._id}`)));
+                    } else if (val?.startsWith('move::')) {
+                      const target = val.split('::')[1];
+                      setLastAction({ type: 'move', notes: notesInCat.map(n => ({ _id: n._id, oldCategory: n.category })), from: categoryToDelete, to: target });
+                      await Promise.all(notesInCat.map(n => axios.put(`/notes/${n._id}`, { ...n, category: target })));
+                    }
                     await axios.delete(`/notes/categories/${categoryToDelete}`);
-                    setNotes(prev => prev.filter(n => n.category !== categoryToDelete));
+
+                    // update local state
+                    if (val === 'delete') {
+                      setNotes(prev => prev.filter(n => n.category !== categoryToDelete));
+                    } else if (val?.startsWith('move::')) {
+                      const target = val.split('::')[1];
+                      setNotes(prev => prev.map(n => n.category === categoryToDelete ? { ...n, category: target } : n));
+                    }
                     setCategories(prev => prev.filter(c => c !== categoryToDelete));
                     setSelectedCategory('All');
                     setShowDeleteCategoryModal(false);
                     setCategoryToDelete(null);
                     if (activeNote && activeNote.category === categoryToDelete) {
-                      setActiveNote(null);
+                      if (val === 'delete') setActiveNote(null);
+                      else setActiveNote({ ...activeNote, category: val.split('::')[1] });
                     }
+
+                    // show undo toast for 5s
+                    setShowUndoToast(true);
+                    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+                    undoTimerRef.current = setTimeout(() => {
+                      setShowUndoToast(false);
+                      setLastAction(null);
+                    }, 5000);
                   } catch (err) {
-                    console.error('Failed to delete notes/category:', err);
-                    alert('Failed to delete notes or category');
+                    console.error('Failed to process category deletion:', err);
+                    alert('Operation failed');
                   }
                 }}
-                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-lg"
+                className={cn(
+                  "h-10 px-4 rounded-lg",
+                  deleteOrMoveSelection === 'delete' ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground"
+                )}
               >
-                Delete notes
+                {deleteOrMoveSelection === 'delete' ? 'Delete notes' : `Move to: ${deleteOrMoveSelection.split('::')[1]}`}
               </button>
-              <div className="flex items-center gap-2">
-                <select id="move-target" className="px-3 py-2 border border-border rounded-lg bg-secondary text-foreground">
-                  {categories.filter(c => c !== categoryToDelete).map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={async () => {
-                    const sel = document.getElementById('move-target');
-                    const target = sel?.value;
-                    if (!target) return alert('Select a target category');
-                    const notesInCat = notes.filter(n => n.category === categoryToDelete);
-                    try {
-                      await Promise.all(notesInCat.map(n => axios.put(`/notes/${n._id}`, { ...n, category: target })));
-                      await axios.delete(`/notes/categories/${categoryToDelete}`);
-                      setNotes(prev => prev.map(n => n.category === categoryToDelete ? { ...n, category: target } : n));
-                      setCategories(prev => prev.filter(c => c !== categoryToDelete));
-                      setSelectedCategory('All');
-                      setShowDeleteCategoryModal(false);
-                      setCategoryToDelete(null);
-                      if (activeNote && activeNote.category === categoryToDelete) {
-                        setActiveNote({ ...activeNote, category: target });
-                      }
-                    } catch (err) {
-                      console.error('Failed to move notes/category:', err);
-                      alert('Failed to move notes or delete category');
-                    }
-                  }}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg"
-                >
-                  Move notes
-                </button>
-              </div>
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setShowDeleteCategoryModal(false); setCategoryToDelete(null); }} className="px-4 py-2 bg-secondary rounded-lg">Cancel</button>
