@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
   ChevronRight,
@@ -720,7 +721,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
             {taskItems.length > 0 ? (
               <div className="space-y-3">
                 {taskItems.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
+                  <button key={item.id} type="button" onClick={() => onOpenTask && onOpenTask(item.taskId)} className="rounded-2xl border border-border bg-background p-4 text-left w-full">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className="font-semibold text-foreground">{item.title}</p>
@@ -730,7 +731,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
                         Due {new Date(item.dueDate).toLocaleDateString('default', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -851,6 +852,21 @@ const CalendarPage = () => {
     setIsDayDetailsOpen(true);
   };
 
+  const navigate = useNavigate();
+
+  const openTaskInList = (taskId) => {
+    setIsDayDetailsOpen(false);
+    navigate(`/tasks?taskId=${taskId}`);
+  };
+
+  const handleItemClick = (item) => {
+    if (item.source === 'task' && item.taskId) {
+      openTaskInList(item.taskId);
+    } else if (item.source === 'event') {
+      openEditModal(item);
+    }
+  };
+
   const openAddModal = (mode) => {
     setEditingEvent(null);
     setModalMode(mode);
@@ -915,6 +931,7 @@ const CalendarPage = () => {
         onClose={() => setIsDayDetailsOpen(false)}
         onAdd={openAddModal}
         onEditEvent={openEditModal}
+        onOpenTask={openTaskInList}
       />
       <CalendarEntryModal
         isOpen={isModalOpen}
@@ -1055,13 +1072,15 @@ const CalendarPage = () => {
                     </div>
                     <div className="mt-2 space-y-1">
                       {dayEvents.slice(0, 3).map((item) => (
-                        <div
+                        <button
+                          type="button"
                           key={item._id || item.id || `${item.title}-${date.toISOString()}`}
-                          className="overflow-hidden rounded-xl px-2 py-1 text-[11px] font-semibold text-white"
+                          onClick={() => handleItemClick(item)}
+                          className="overflow-hidden rounded-xl px-2 py-1 text-[11px] font-semibold text-white text-left w-full"
                           style={{ backgroundColor: item.color }}
                         >
                           {item.title}
-                        </div>
+                        </button>
                       ))}
                       {dayEvents.length > 3 && (
                         <div className="text-[11px] text-muted-foreground">+{dayEvents.length - 3} more</div>
@@ -1105,14 +1124,14 @@ const CalendarPage = () => {
                     </div>
                     <div className="space-y-3">
                       {dayEvents.length ? dayEvents.map((item) => (
-                        <div key={item._id || item.id || `${item.title}-${date.toISOString()}` } className="rounded-2xl border border-border bg-secondary/70 p-3">
+                        <button key={item._id || item.id || `${item.title}-${date.toISOString()}` } type="button" onClick={() => handleItemClick(item)} className="rounded-2xl border border-border bg-secondary/70 p-3 text-left w-full">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="w-3 h-3" />
                             <span>{item.allDay ? 'All day' : `${new Date(item.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(item.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>
                           </div>
                           <p className="mt-2 text-sm font-semibold text-foreground">{item.title}</p>
                           <p className="text-xs text-muted-foreground truncate">{item.description}</p>
-                        </div>
+                        </button>
                       )) : (
                         <div className="rounded-3xl border border-dashed border-border bg-secondary/40 p-4 text-sm text-muted-foreground">No items</div>
                       )}
@@ -1136,7 +1155,7 @@ const CalendarPage = () => {
               </div>
               <div className="space-y-4">
                 {getItemsForDate(currentDate).map((item) => (
-                  <div key={item._id || item.id || `${item.title}-${currentDate.toISOString()}` } className="rounded-3xl border border-border bg-secondary/70 p-5">
+                  <button key={item._id || item.id || `${item.title}-${currentDate.toISOString()}` } type="button" onClick={() => handleItemClick(item)} className="rounded-3xl border border-border bg-secondary/70 p-5 text-left w-full">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">{item.title}</p>
@@ -1156,7 +1175,7 @@ const CalendarPage = () => {
                       </div>
                     </div>
                     <p className="mt-3 text-sm text-muted-foreground">{item.description}</p>
-                  </div>
+                  </button>
                 ))}
                 {getItemsForDate(currentDate).length === 0 && (
                   <div className="rounded-3xl border border-dashed border-border bg-secondary/40 p-6 text-sm text-muted-foreground">No entries for this day. Click on a date to add one.</div>

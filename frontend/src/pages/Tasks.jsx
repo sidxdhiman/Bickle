@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   Plus, Search, LayoutList, LayoutGrid, MoreVertical,
@@ -730,6 +731,7 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
 };
 
 const TaskPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState('list');
   const [tasks, setTasks] = useState([]);
   const [lists, setLists] = useState([]);
@@ -758,6 +760,17 @@ const TaskPage = () => {
 
         const currentTasks = (await axios.get('/tasks')).data;
         setTasks(currentTasks);
+
+        // If a taskId is present in the URL, open that task in the detail modal
+        const taskId = searchParams.get('taskId');
+        if (taskId) {
+          const found = currentTasks.find(t => t._id === taskId);
+          if (found) {
+            setSelectedTask(found);
+            setIsDetailModalOpen(true);
+            setSearchParams({});
+          }
+        }
       } catch (error) {
         console.error('Error fetching tasks data', error);
       } finally {
