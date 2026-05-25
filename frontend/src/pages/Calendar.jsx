@@ -64,8 +64,118 @@ const getWeekDays = (date) => {
 };
 
 const getMonthInputValue = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+const formatDateInputValue = (date) => date
+  ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+  : '';
 const formatShortDate = (date) => date.toLocaleDateString('default', { month: 'short', day: 'numeric' });
 const formatFullDate = (date) => date.toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' });
+
+const getDaysBetween = (start, end) => Math.floor((end - start) / (24 * 60 * 60 * 1000));
+const getMonthDifference = (start, end) => (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+
+const addDays = (date, amount) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+};
+
+const addMonths = (date, amount) => {
+  const next = new Date(date);
+  const day = next.getDate();
+  next.setMonth(next.getMonth() + amount);
+  if (next.getDate() !== day) {
+    next.setDate(0);
+  }
+  return next;
+};
+
+const getViewRange = (currentDate, view) => {
+  if (view === 'month') {
+    const firstOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const start = new Date(firstOfMonth);
+    start.setDate(firstOfMonth.getDate() - firstOfMonth.getDay());
+    const lastOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const end = new Date(lastOfMonth);
+    end.setDate(lastOfMonth.getDate() + (6 - lastOfMonth.getDay()));
+    return [startOfDay(start), endOfDay(end)];
+  }
+
+  if (view === 'week') {
+    const start = new Date(currentDate);
+    start.setDate(currentDate.getDate() - currentDate.getDay());
+    const end = addDays(start, 6);
+    return [startOfDay(start), endOfDay(end)];
+  }
+
+  return [startOfDay(currentDate), endOfDay(currentDate)];
+};
+
+const buildRecurringOccurrences = (event, rangeStart, rangeEnd) => {
+  if (!event.recurrence || event.recurrence.frequency === 'none') {
+    return [event];
+  }
+
+  const frequency = event.recurrence.frequency;
+  const interval = Math.max(1, Number(event.recurrence.interval) || 1);
+  const duration = event.end.getTime() - event.start.getTime();
+  const eventStart = startOfDay(event.start);
+  const recurrenceEnd = event.recurrence.endDate ? startOfDay(new Date(event.recurrence.endDate)) : null;
+  const effectiveEnd = recurrenceEnd && recurrenceEnd < rangeEnd ? recurrenceEnd : rangeEnd;
+
+  if (effectiveEnd < eventStart || rangeEnd < eventStart) {
+    return [];
+  }
+
+  const occurrences = [];
+  let current = new Date(eventStart);
+
+  const addOccurrence = (date) => {
+    const start = new Date(date);
+    start.setHours(event.start.getHours(), event.start.getMinutes(), event.start.getSeconds(), event.start.getMilliseconds());
+    const end = new Date(start.getTime() + duration);
+    occurrences.push({
+      ...event,
+      start,
+      end,
+      occurrenceDate: new Date(start),
+    });
+  };
+
+  if (frequency === 'daily') {
+    while (current <= effectiveEnd) {
+      if (current >= rangeStart) addOccurrence(current);
+      current = addDays(current, interval);
+    }
+    return occurrences;
+  }
+
+  if (frequency === 'weekdays') {
+    while (current <= effectiveEnd) {
+      const day = current.getDay();
+      if (current >= rangeStart && day !== 0 && day !== 6) addOccurrence(current);
+      current = addDays(current, 1);
+    }
+    return occurrences;
+  }
+
+  if (frequency === 'weekly') {
+    while (current <= effectiveEnd) {
+      if (current >= rangeStart) addOccurrence(current);
+      current = addDays(current, interval * 7);
+    }
+    return occurrences;
+  }
+
+  if (frequency === 'monthly') {
+    while (current <= effectiveEnd) {
+      if (current >= rangeStart) addOccurrence(current);
+      current = addMonths(current, interval);
+    }
+    return occurrences;
+  }
+
+  return [];
+};
 
 const parseTimeToMinutes = (time) => {
   const [hours, minutes] = time.split(':').map(Number);
@@ -119,6 +229,9 @@ const CalendarEntryModal = ({
   onClose,
   onCreateTask,
   onCreateEvent,
+  onUpdateEvent,
+  onDeleteEvent,
+  editingEvent,
   setMode
 }) => {
   const [taskForm, setTaskForm] = useState({
@@ -127,17 +240,20 @@ const CalendarEntryModal = ({
     list: lists[0]?._id || '',
     priority: 'medium',
     status: 'todo',
-    dueDate: date ? date.toISOString().split('T')[0] : ''
+    dueDate: date ? formatDateInputValue(date) : ''
   });
 
   const [eventForm, setEventForm] = useState({
     title: '',
     description: '',
     location: '',
-    date: date ? date.toISOString().split('T')[0] : '',
+    date: date ? formatDateInputValue(date) : '',
     startTime: '09:00',
     endTime: '10:00',
-    allDay: false
+    allDay: false,
+    repeatFrequency: 'none',
+    repeatInterval: 1,
+    repeatEndDate: ''
   });
   const [eventDuration, setEventDuration] = useState(60);
 
@@ -145,16 +261,46 @@ const CalendarEntryModal = ({
     setTaskForm((prev) => ({
       ...prev,
       list: lists[0]?._id || prev.list,
-      dueDate: date ? date.toISOString().split('T')[0] : prev.dueDate,
+      dueDate: date ? formatDateInputValue(date) : prev.dueDate,
     }));
   }, [date, lists]);
 
   useEffect(() => {
     setEventForm((prev) => ({
       ...prev,
-      date: date ? date.toISOString().split('T')[0] : prev.date,
+      date: date ? formatDateInputValue(date) : prev.date,
     }));
   }, [date]);
+
+  useEffect(() => {
+    if (editingEvent) {
+      const startDate = new Date(editingEvent.start);
+      const endDate = new Date(editingEvent.end);
+      setEventForm({
+        title: editingEvent.title || '',
+        description: editingEvent.description || '',
+        location: editingEvent.location || '',
+        date: formatDateInputValue(startDate),
+        startTime: editingEvent.allDay ? '00:00' : formatMinutesToTime(startDate.getHours() * 60 + startDate.getMinutes()),
+        endTime: editingEvent.allDay ? '23:59' : formatMinutesToTime(endDate.getHours() * 60 + endDate.getMinutes()),
+        allDay: editingEvent.allDay || false,
+        repeatFrequency: editingEvent.recurrence?.frequency || 'none',
+        repeatInterval: editingEvent.recurrence?.interval || 1,
+        repeatEndDate: editingEvent.recurrence?.endDate ? formatDateInputValue(new Date(editingEvent.recurrence.endDate)) : ''
+      });
+    } else {
+      setEventForm((prev) => ({
+        ...prev,
+        title: '',
+        description: '',
+        location: '',
+        date: date ? formatDateInputValue(date) : prev.date,
+        startTime: '09:00',
+        endTime: '10:00',
+        allDay: false
+      }));
+    }
+  }, [editingEvent, date]);
 
   useEffect(() => {
     setEventDuration(60);
@@ -193,7 +339,7 @@ const CalendarEntryModal = ({
       end.setHours(start.getHours() + 1);
     }
 
-    await onCreateEvent({
+    const eventPayload = {
       title: eventForm.title,
       description: eventForm.description,
       location: eventForm.location,
@@ -201,7 +347,22 @@ const CalendarEntryModal = ({
       end,
       allDay: eventForm.allDay,
       color: '#6366f1'
-    });
+    };
+
+    if (eventForm.repeatFrequency && eventForm.repeatFrequency !== 'none') {
+      eventPayload.recurrence = {
+        frequency: eventForm.repeatFrequency,
+        interval: Number(eventForm.repeatInterval) || 1,
+        ...(eventForm.repeatEndDate ? { endDate: new Date(eventForm.repeatEndDate) } : {})
+      };
+    }
+
+    if (editingEvent && onUpdateEvent) {
+      await onUpdateEvent(editingEvent._id, eventPayload);
+    } else {
+      await onCreateEvent(eventPayload);
+    }
+
     onClose();
   };
 
@@ -210,8 +371,8 @@ const CalendarEntryModal = ({
       <div className="bg-background border border-border w-full max-w-xl max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-2xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 border-b border-border">
           <div>
-            <h2 className="text-xl font-semibold">Add {mode === 'task' ? 'Task' : 'Event'}</h2>
-            <p className="text-sm text-muted-foreground">Create an item for {date ? formatFullDate(date) : 'the selected date'}.</p>
+            <h2 className="text-xl font-semibold">{editingEvent ? 'Edit' : 'Add'} {mode === 'task' ? 'Task' : 'Event'}</h2>
+            <p className="text-sm text-muted-foreground">{editingEvent ? 'Update the selected event' : `Create an item for ${date ? formatFullDate(date) : 'the selected date'}`}</p>
           </div>
           <div className="flex gap-2 rounded-full bg-secondary p-1">
             {['task', 'event'].map((option) => (
@@ -361,6 +522,51 @@ const CalendarEntryModal = ({
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-foreground mb-2">Repeat</label>
+                  <select
+                    value={eventForm.repeatFrequency}
+                    onChange={(e) => setEventForm({ ...eventForm, repeatFrequency: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="none">Does not repeat</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekdays">Weekdays</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                {eventForm.repeatFrequency !== 'none' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2">Repeat every</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={eventForm.repeatInterval}
+                      onChange={(e) => setEventForm({ ...eventForm, repeatInterval: Number(e.target.value) })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {eventForm.repeatFrequency === 'daily' && 'days'}
+                      {eventForm.repeatFrequency === 'weekdays' && 'weekdays'}
+                      {eventForm.repeatFrequency === 'weekly' && 'weeks'}
+                      {eventForm.repeatFrequency === 'monthly' && 'months'}
+                    </p>
+                  </div>
+                )}
+                {eventForm.repeatFrequency !== 'none' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-2">Ends on</label>
+                    <input
+                      type="date"
+                      value={eventForm.repeatEndDate}
+                      onChange={(e) => setEventForm({ ...eventForm, repeatEndDate: e.target.value })}
+                      className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                )}
+              </div>
               {!eventForm.allDay && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -388,19 +594,31 @@ const CalendarEntryModal = ({
             </>
           )}
 
-          <div className="flex gap-3 pt-4 border-t border-border">
+          <div className="flex flex-col gap-3 pt-4 border-t border-border sm:flex-row">
+            {editingEvent && onDeleteEvent && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await onDeleteEvent(editingEvent._id);
+                  onClose();
+                }}
+                className="w-full sm:w-auto rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 transition-colors"
+              >
+                Delete
+              </button>
+            )}
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 bg-secondary text-secondary-foreground py-2 rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium"
+              className="w-full sm:flex-1 bg-secondary text-secondary-foreground py-2 rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
+              className="w-full sm:flex-1 bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
             >
-              Save {mode === 'task' ? 'Task' : 'Event'}
+              {editingEvent ? 'Update Event' : `Save ${mode === 'task' ? 'Task' : 'Event'}`}
             </button>
           </div>
         </form>
@@ -409,7 +627,7 @@ const CalendarEntryModal = ({
   );
 };
 
-const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd }) => {
+const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) => {
   if (!isOpen || !date) return null;
   const eventItems = items.filter((item) => item.source === 'event');
   const taskItems = items.filter((item) => item.source === 'task');
@@ -460,15 +678,29 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd }) => {
             {eventItems.length > 0 ? (
               <div className="space-y-3">
                 {eventItems.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
+                  <div key={item._id || item.id || `${item.title}-${item.start}`} className="rounded-2xl border border-border bg-background p-4">
                     <div className="flex items-center justify-between gap-4">
                       <div>
                         <p className="font-semibold text-foreground">{item.title}</p>
                         <p className="text-xs text-muted-foreground truncate">{item.location || 'No location'}</p>
+                        {item.recurrence?.frequency && item.recurrence.frequency !== 'none' && (
+                          <span className="inline-flex mt-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            Repeats {item.recurrence.frequency}{item.recurrence.interval > 1 ? ` every ${item.recurrence.interval}` : ''}
+                          </span>
+                        )}
                       </div>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                        {item.allDay ? 'All day' : `${new Date(item.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(item.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          {item.allDay ? 'All day' : `${new Date(item.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(item.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onEditEvent(item)}
+                          className="rounded-full border border-border bg-secondary px-3 py-1 text-[11px] font-semibold text-foreground hover:bg-accent/80 transition-colors"
+                        >
+                          Edit
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -521,6 +753,7 @@ const CalendarPage = () => {
   const [modalMode, setModalMode] = useState('task');
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(today);
+  const [editingEvent, setEditingEvent] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -569,7 +802,9 @@ const CalendarPage = () => {
     }
   };
 
-  const allItems = sortCalendarItems([...events.map((event) => ({ ...event, source: 'event' })), ...createTaskEvents(tasks)]);
+  const [rangeStart, rangeEnd] = getViewRange(currentDate, view);
+  const visibleEvents = events.flatMap((event) => buildRecurringOccurrences(event, rangeStart, rangeEnd));
+  const allItems = sortCalendarItems([...visibleEvents.map((event) => ({ ...event, source: 'event' })), ...createTaskEvents(tasks)]);
 
   const getItemsForDate = (date) =>
     allItems.filter((item) => isInRange(date, item.start, item.end));
@@ -617,7 +852,16 @@ const CalendarPage = () => {
   };
 
   const openAddModal = (mode) => {
+    setEditingEvent(null);
     setModalMode(mode);
+    setIsDayDetailsOpen(false);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (event) => {
+    setSelectedDate(new Date(event.start));
+    setModalMode('event');
+    setEditingEvent(event);
     setIsDayDetailsOpen(false);
     setIsModalOpen(true);
   };
@@ -644,6 +888,24 @@ const CalendarPage = () => {
     }
   };
 
+  const handleUpdateEvent = async (eventId, eventData) => {
+    try {
+      await axios.put(`/calendar/${eventId}`, eventData);
+      await refreshCalendar();
+    } catch (error) {
+      console.error('Failed to update calendar event', error);
+    }
+  };
+
+  const handleDeleteEvent = async (eventId) => {
+    try {
+      await axios.delete(`/calendar/${eventId}`);
+      await refreshCalendar();
+    } catch (error) {
+      console.error('Failed to delete calendar event', error);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col gap-6">
       <DayDetailsModal
@@ -652,6 +914,7 @@ const CalendarPage = () => {
         items={getItemsForDate(selectedDate)}
         onClose={() => setIsDayDetailsOpen(false)}
         onAdd={openAddModal}
+        onEditEvent={openEditModal}
       />
       <CalendarEntryModal
         isOpen={isModalOpen}
@@ -659,9 +922,15 @@ const CalendarPage = () => {
         lists={lists}
         mode={modalMode}
         setMode={setModalMode}
-        onClose={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingEvent(null);
+        }}
         onCreateTask={handleCreateTask}
         onCreateEvent={handleCreateEvent}
+        onUpdateEvent={handleUpdateEvent}
+        onDeleteEvent={handleDeleteEvent}
+        editingEvent={editingEvent}
       />
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -787,7 +1056,7 @@ const CalendarPage = () => {
                     <div className="mt-2 space-y-1">
                       {dayEvents.slice(0, 3).map((item) => (
                         <div
-                          key={item.id}
+                          key={item._id || item.id || `${item.title}-${date.toISOString()}`}
                           className="overflow-hidden rounded-xl px-2 py-1 text-[11px] font-semibold text-white"
                           style={{ backgroundColor: item.color }}
                         >
@@ -836,7 +1105,7 @@ const CalendarPage = () => {
                     </div>
                     <div className="space-y-3">
                       {dayEvents.length ? dayEvents.map((item) => (
-                        <div key={item.id} className="rounded-2xl border border-border bg-secondary/70 p-3">
+                        <div key={item._id || item.id || `${item.title}-${date.toISOString()}` } className="rounded-2xl border border-border bg-secondary/70 p-3">
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="w-3 h-3" />
                             <span>{item.allDay ? 'All day' : `${new Date(item.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(item.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>
@@ -867,7 +1136,7 @@ const CalendarPage = () => {
               </div>
               <div className="space-y-4">
                 {getItemsForDate(currentDate).map((item) => (
-                  <div key={item.id} className="rounded-3xl border border-border bg-secondary/70 p-5">
+                  <div key={item._id || item.id || `${item.title}-${currentDate.toISOString()}` } className="rounded-3xl border border-border bg-secondary/70 p-5">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">{item.title}</p>

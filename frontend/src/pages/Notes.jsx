@@ -244,15 +244,33 @@ const NotesPage = () => {
   const [saveStatus, setSaveStatus] = useState('idle'); // idle | saving | saved
   const saveTimer = useRef(null);
 
+  const restoreTextareaSelection = (start, end) => {
+    if (start === undefined || end === undefined) return;
+    requestAnimationFrame(() => {
+      if (!textAreaRef.current) return;
+      textAreaRef.current.focus();
+      textAreaRef.current.setSelectionRange(start, end);
+    });
+  };
+
   const saveActiveNote = async (note) => {
     if (!note || !note._id) return;
+    const selection = getSelection();
+    const cursorStart = selection?.selectionStart;
+    const cursorEnd = selection?.selectionEnd;
+
     setSaveStatus('saving');
     try {
       const res = await axios.put(`/notes/${note._id}`, note);
       setNotes(prev => prev.map(n => n._id === note._id ? res.data : n));
-      setActiveNote(res.data);
+      setActiveNote(prev => {
+        if (!prev || prev._id !== note._id) return prev;
+        const sameContent = prev.title === res.data.title && prev.content === res.data.content && prev.category === res.data.category && prev.isPinned === res.data.isPinned;
+        return sameContent ? prev : { ...prev, ...res.data };
+      });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 1200);
+      restoreTextareaSelection(cursorStart, cursorEnd);
     } catch (err) {
       console.error('Autosave failed:', err);
       setSaveStatus('idle');

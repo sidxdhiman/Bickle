@@ -3,6 +3,9 @@ const Task = require('../models/Task');
 
 exports.createEvent = async (req, res) => {
   try {
+    if (req.body.recurrence && req.body.recurrence.frequency === 'none') {
+      delete req.body.recurrence;
+    }
     const event = await CalendarEvent.create({ ...req.body, user: req.user._id });
     res.status(201).json(event);
   } catch (error) {
@@ -29,6 +32,9 @@ exports.getEvents = async (req, res) => {
 
 exports.updateEvent = async (req, res) => {
   try {
+    if (req.body.recurrence && req.body.recurrence.frequency === 'none') {
+      delete req.body.recurrence;
+    }
     const event = await CalendarEvent.findOneAndUpdate(
       { _id: req.params.id, user: req.user._id },
       req.body,

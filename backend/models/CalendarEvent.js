@@ -31,6 +31,21 @@ const calendarEventSchema = new mongoose.Schema({
     type: String,
     default: '#6366f1',
   },
+  recurrence: {
+    frequency: {
+      type: String,
+      enum: ['none', 'daily', 'weekdays', 'weekly', 'monthly'],
+      default: 'none',
+    },
+    interval: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    endDate: {
+      type: Date,
+    },
+  },
   task: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Task',
