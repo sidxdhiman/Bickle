@@ -6,6 +6,7 @@ import {
   Calendar as CalendarIcon,
   FileText,
   Moon,
+  DollarSign,
   Settings,
   LogOut
 } from 'lucide-react';
@@ -22,6 +23,7 @@ const navItems = [
   { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
   { icon: FileText, label: 'Notes', path: '/notes' },
   { icon: Moon, label: 'Sleep', path: '/sleep' },
+  { icon: DollarSign, label: 'Money', path: '/money' },
 ];
 
 const Sidebar = () => {

@@ -7,6 +7,7 @@ import Tasks from './pages/Tasks';
 import Calendar from './pages/Calendar';
 import Notes from './pages/Notes';
 import Sleep from './pages/Sleep';
+import Money from './pages/Money';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 
@@ -63,6 +64,7 @@ const App = () => {
           <Route path="calendar" element={<Calendar />} />
           <Route path="notes" element={<Notes />} />
           <Route path="sleep" element={<Sleep />} />
+          <Route path="money" element={<Money />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
