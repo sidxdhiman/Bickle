@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Bell, User } from 'lucide-react';
 import ProfileModal from './ProfileModal';
 import { useNavigate } from 'react-router-dom';
@@ -12,6 +12,7 @@ const TopNav = () => {
 
   const [showProfile, setShowProfile] = useState(false);
   const [profilePic, setProfilePic] = useState(null);
+  const profileRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,20 +41,20 @@ const TopNav = () => {
           <Bell className="w-5 h-5 text-muted-foreground" />
           <span className="absolute top-2 right-2 w-2 h-2 bg-primary rounded-full border-2 border-background"></span>
         </button>
-        <div className="flex items-center gap-3 pl-4 border-l border-border">
-          <div className="text-right hidden sm:block cursor-pointer" onClick={() => setShowProfile(true)}>
+        <div ref={profileRef} className="relative flex items-center gap-3 pl-4 border-l border-border">
+          <div className="text-right hidden sm:block cursor-pointer" onClick={() => setShowProfile((prev) => !prev)}>
             <p className="text-sm font-semibold leading-none">Sidharth</p>
             <p className="text-xs text-muted-foreground">Pro Plan</p>
           </div>
-          <div onClick={() => setShowProfile(true)} className="w-9 h-9 bg-accent rounded-full flex items-center justify-center overflow-hidden border border-border cursor-pointer hover:ring-2 ring-primary transition-all">
+          <div onClick={() => setShowProfile((prev) => !prev)} className="w-9 h-9 bg-accent rounded-full flex items-center justify-center overflow-hidden border border-border cursor-pointer hover:ring-2 ring-primary transition-all">
             {profilePic ? (
               <img src={profilePic} alt="profile" className="w-full h-full object-cover" />
             ) : (
               <User className="w-6 h-6 text-muted-foreground" />
             )}
           </div>
+          <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} reference={profileRef} />
         </div>
-        <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
       </div>
     </header>
   );
