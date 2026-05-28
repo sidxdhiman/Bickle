@@ -9,6 +9,7 @@ import Notes from './pages/Notes';
 import Sleep from './pages/Sleep';
 import Money from './pages/Money';
 import Settings from './pages/Settings';
+import Focus from './pages/Focus';
 import Login from './pages/Login';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
@@ -65,6 +66,7 @@ const App = () => {
           <Route path="notes" element={<Notes />} />
           <Route path="sleep" element={<Sleep />} />
           <Route path="money" element={<Money />} />
+          <Route path="focus" element={<Focus />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

@@ -7,6 +7,7 @@ import {
   FileText,
   Moon,
   DollarSign,
+  Timer,
   Settings,
   LogOut
 } from 'lucide-react';
@@ -20,6 +21,7 @@ function cn(...inputs) {
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
+  { icon: Timer, label: 'Focus', path: '/focus' },
   { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
   { icon: FileText, label: 'Notes', path: '/notes' },
   { icon: Moon, label: 'Sleep', path: '/sleep' },
