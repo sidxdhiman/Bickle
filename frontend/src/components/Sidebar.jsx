@@ -9,6 +9,7 @@ import {
   DollarSign,
   Timer,
   Settings,
+  Globe,
   LogOut
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -26,6 +27,7 @@ const navItems = [
   { icon: FileText, label: 'Notes', path: '/notes' },
   { icon: Moon, label: 'Sleep', path: '/sleep' },
   { icon: DollarSign, label: 'Money', path: '/money' },
+  { icon: Globe, label: 'Translator', path: '/translator' },
 ];
 
 const Sidebar = () => {

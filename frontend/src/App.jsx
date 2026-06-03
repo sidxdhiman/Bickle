@@ -11,6 +11,7 @@ import Money from './pages/Money';
 import Settings from './pages/Settings';
 import Focus from './pages/Focus';
 import Login from './pages/Login';
+import Translator from './pages/Translator';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -68,6 +69,7 @@ const App = () => {
           <Route path="money" element={<Money />} />
           <Route path="focus" element={<Focus />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="translator" element={<Translator />} />
         </Route>
       </Routes>
     </BrowserRouter>
