@@ -126,7 +126,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6">
       <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
@@ -179,7 +179,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-semibold text-foreground mb-2">Priority</label>
               <select
@@ -216,7 +216,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
             />
           </div>
 
-          <div className="flex gap-3 pt-4 border-t border-border">
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-border">
             <button
               type="button"
               onClick={onClose}
@@ -286,7 +286,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6">
       <div className="bg-background border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
         {/* Header with close button */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
@@ -302,7 +302,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
         {/* Content */}
         <div className="p-4 sm:p-6">
           {/* Status toggle and actions */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-3 sm:gap-0">
             <div className="flex items-center gap-3">
               <button
                 onClick={handleStatusToggle}
@@ -338,7 +338,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
           {/* Description section */}
           {task.description && (
             <div className="mb-6">
-              <h3 className="text-sm font-semibold text-foreground mb-2 uppercase tracking-wide">Description</h3>
+              <h3 className="text-xs sm:text-sm font-semibold text-foreground mb-2 uppercase tracking-wide">Description</h3>
               <div className="bg-secondary/30 border border-border rounded-md p-3">
                 <p className="text-sm leading-relaxed text-foreground">{task.description}</p>
               </div>
@@ -346,7 +346,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
           )}
 
           {/* Task details grid */}
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div className="bg-secondary/30 border border-border rounded-md p-3">
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Priority</h3>
               <span className={cn(
@@ -376,7 +376,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
           </div>
 
           {/* Additional info */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="bg-secondary/30 border border-border rounded-md p-3">
               <h3 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">List</h3>
               <p className="text-sm text-foreground">{getListName(task.list)}</p>
@@ -747,6 +747,7 @@ const TaskPage = () => {
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(true);
   const [draggedTask, setDraggedTask] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // For mobile sidebar
 
   useEffect(() => {
     const fetchData = async () => {
@@ -969,26 +970,305 @@ const TaskPage = () => {
   if (loading) return <TasksSkeleton />;
 
   return (
-    <div className="h-full flex flex-col gap-4 sm:gap-6">
+    <div className="flex flex-col lg:flex-row h-full max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 gap-6">
+      {/* Mobile Sidebar Toggle */}
+      <button
+        className="lg:hidden fixed bottom-4 right-4 z-40 p-3 rounded-full bg-primary text-primary-foreground shadow-lg"
+        onClick={() => setIsSidebarOpen(true)}
+      >
+        <Grip className="w-6 h-6" />
+      </button>
+
+      {/* Task List Sidebar - Mobile Overlay */}
+      <div
+        className={cn(
+          "fixed inset-0 bg-black/50 z-40 lg:hidden",
+          isSidebarOpen ? "block" : "hidden"
+        )}
+        onClick={() => setIsSidebarOpen(false)}
+      ></div>
+
+      <div
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-64 h-full bg-secondary border-r border-border flex flex-col p-4 gap-8 transition-transform duration-300 lg:relative lg:translate-x-0",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <h2 className="text-lg font-bold flex items-center justify-between">
+          My Task Lists
+          <button
+            onClick={() => setIsCreateListOpen(true)}
+            className="p-2 rounded-full hover:bg-accent transition-colors"
+            title="Create new list"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+          <button
+            className="lg:hidden p-2 rounded-full hover:bg-accent transition-colors"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </h2>
+        <nav className="flex-1 space-y-2 overflow-y-auto">
+          {lists.length > 0 ? (
+            lists.map(list => (
+              <div
+                key={list._id}
+                onClick={() => {
+                  setSelectedList(list._id);
+                  setIsSidebarOpen(false); // Close sidebar on selection
+                }}
+                className={cn(
+                  "flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors",
+                  selectedList === list._id
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span className="font-medium text-sm">{list.name}</span>
+                <div className="flex items-center gap-1">
+                  {selectedList === list._id && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingList(list);
+                        setIsListManagementOpen(true);
+                      }}
+                      className="p-1.5 rounded-full hover:bg-primary/80"
+                      title="Edit list"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                  )}
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-foreground/20 text-primary-foreground">
+                    {tasks.filter(task => task.list === list._id).length}
+                  </span>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No lists yet. Create one!</p>
+          )}
+        </nav>
+      </div>
+
+      {/* Main Task Content */}
+      <div className="flex-1 bg-background border border-border rounded-lg p-4 sm:p-6 space-y-6 overflow-hidden">
+        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              {selectedList === 'all' ? 'All Tasks' : lists.find(l => l._id === selectedList)?.name}
+              <span className="text-base font-medium text-muted-foreground">({filteredTasks.length} tasks)</span>
+            </h1>
+            {selectedList !== 'all' && lists.find(l => l._id === selectedList)?.description && (
+              <p className="text-sm text-muted-foreground">{lists.find(l => l._id === selectedList).description}</p>
+            )}
+          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Add Task
+          </button>
+        </header>
+
+        {/* Filters and View Mode */}
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4 py-4 border-b border-border">
+          <div className="flex-1 w-full">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                // value={searchQuery}
+                // onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-secondary border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 items-center">
+            <button
+              // onClick={() => setIsFilterOpen(prev => !prev)}
+              className="flex items-center gap-2 px-3 py-2 bg-secondary text-muted-foreground rounded-md hover:bg-accent transition-colors text-sm font-medium"
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+            </button>
+            <div className="flex rounded-md overflow-hidden bg-secondary border border-border">
+              <button
+                onClick={() => setView('list')}
+                className={cn(
+                  "p-2 transition-colors",
+                  view === 'list' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+                )}
+                title="List View"
+              >
+                <LayoutList className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setView('kanban')}
+                className={cn(
+                  "p-2 transition-colors",
+                  view === 'kanban' ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
+                )}
+                title="Kanban View"
+              >
+                <LayoutGrid className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Task Display */}
+        <div className="flex-1 overflow-y-auto pr-2 -mr-2">
+          {filteredTasks.length > 0 ? (
+            view === 'list' ? (
+              <div className="space-y-3">
+                {filteredTasks.map(task => (
+                  <div
+                    key={task._id}
+                    className="flex items-center justify-between bg-secondary border border-border rounded-md p-3 cursor-pointer hover:border-primary/50 transition-colors"
+                    onClick={() => {
+                      setSelectedTask(task);
+                      setIsDetailModalOpen(true);
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // handleUpdateTask({ ...task, status: task.status === 'completed' ? 'todo' : 'completed' });
+                        }}
+                        className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                          task.status === 'completed' ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground hover:bg-accent"
+                        )}
+                      >
+                        {task.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+                      </div>
+                      <div>
+                        <p className={cn("font-medium", task.status === 'completed' && "line-through text-muted-foreground")}>{task.title}</p>
+                        <p className="text-sm text-muted-foreground">{getStatusLabel(task.status)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      {isTaskOverdue(task) && (
+                        <span className="text-xs text-red-500 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3" /> Overdue
+                        </span>
+                      )}
+                      {task.dueDate && (
+                        <span className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-4 h-4" /> {new Date(task.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                      <span className={cn(
+                        "px-2 py-0.5 text-xs font-medium rounded-full",
+                        task.priority === 'high' ? "bg-red-500/10 text-red-500" :
+                        task.priority === 'medium' ? "bg-orange-500/10 text-orange-500" : "bg-blue-500/10 text-blue-500"
+                      )}>{task.priority}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {lists.filter(list => list._id === selectedList || selectedList === 'all').map(list => (
+                  <div key={list._id} className="bg-secondary border border-border rounded-md p-4 space-y-3">
+                    <h3 className="text-md font-semibold mb-3 flex items-center gap-2" style={{ color: list.color }}>
+                      <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: list.color }}></span>
+                      {list.name}
+                    </h3>
+                    {filteredTasks
+                      .filter(task => task.list === list._id)
+                      .map(task => (
+                        <div
+                          key={task._id}
+                          className="bg-background border border-border rounded-md p-3 cursor-pointer hover:border-primary/50 transition-colors"
+                          onClick={() => {
+                            setSelectedTask(task);
+                            setIsDetailModalOpen(true);
+                          }}
+                        >
+                          <p className="font-medium mb-1 text-sm">{task.title}</p>
+                          {task.dueDate && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-2">
+                              <Calendar className="w-3 h-3" /> {new Date(task.dueDate).toLocaleDateString()}
+                            </p>
+                          )}
+                          <div className="flex items-center justify-between">
+                            <span className={cn(
+                              "px-2 py-0.5 text-xs font-medium rounded-full",
+                              task.priority === 'high' ? "bg-red-500/10 text-red-500" :
+                              task.priority === 'medium' ? "bg-orange-500/10 text-orange-500" : "bg-blue-500/10 text-blue-500"
+                            )}>{task.priority}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // handleUpdateTask({ ...task, status: task.status === 'completed' ? 'todo' : 'completed' });
+                              }}
+                              className={cn(
+                                "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
+                                task.status === 'completed' ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground hover:bg-accent"
+                              )}
+                            >
+                              {task.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {filteredTasks.filter(task => task.list === list._id).length === 0 && (
+                      <div className="text-center py-4 text-muted-foreground text-sm">
+                        No tasks in this list.
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          ) : ( selectedList !== 'all' && filteredTasks.length === 0 ) ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <LayoutList className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">No tasks found for this list.</p>
+              <p className="text-sm">Try creating a new task!</p>
+            </div>
+          ) : (
+            <div className="text-center py-12 text-muted-foreground">
+              <LayoutList className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-lg">No tasks found.</p>
+              <p className="text-sm">Create your first task to get started!</p>
+            </div>
+          )}
+        </div>
+      </div>
+
       <TaskModal
         isOpen={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setEditingTask(null);
-        }}
-        onSubmit={editingTask ? handleUpdateTask : handleCreateTask}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={handleCreateTask}
         lists={lists}
-        task={editingTask}
-        defaultListId={selectedList === 'all' ? lists[0]?._id : selectedList}
+        defaultListId={selectedList !== 'all' ? selectedList : (lists.length > 0 ? lists[0]._id : '')}
       />
+
+      {editingTask && (
+        <TaskModal
+          isOpen={!!editingTask}
+          onClose={() => setEditingTask(null)}
+          onSubmit={handleUpdateTask}
+          lists={lists}
+          task={editingTask}
+        />
+      )}
 
       <TaskDetailModal
         isOpen={isDetailModalOpen}
         onClose={() => setIsDetailModalOpen(false)}
         task={selectedTask}
         lists={lists}
-        onUpdate={handleTaskUpdate}
-        onDelete={handleTaskDelete}
+        onUpdate={handleUpdateTask}
+        onDelete={handleDeleteTask}
         onEdit={(task) => {
           setEditingTask(task);
           setIsModalOpen(true);
@@ -998,346 +1278,20 @@ const TaskPage = () => {
       <CreateListModal
         isOpen={isCreateListOpen}
         onClose={() => setIsCreateListOpen(false)}
-        onCreate={handleCreateListSubmit}
+        onCreate={handleCreateList}
       />
 
       <ListManagementModal
         isOpen={isListManagementOpen}
         onClose={() => setIsListManagementOpen(false)}
         list={editingList}
-        onUpdate={handleListManagementUpdate}
+        onUpdate={() => {
+          // Re-fetch lists and tasks to ensure data consistency after list update
+          // This is a simplified approach, a more robust solution would update local state intelligently
+          axios.get('/lists').then(res => setLists(res.data));
+          axios.get('/tasks').then(res => setTasks(res.data));
+        }}
       />
-
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">My Tasks</h1>
-          <p className="text-muted-foreground">Manage your daily productivity</p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <div className="flex items-center gap-2 bg-background border border-border rounded-md px-1">
-              <select
-                value={selectedList}
-                onChange={(e) => setSelectedList(e.target.value)}
-                className="min-w-[180px] px-3 py-2 bg-background focus:outline-none focus:ring-2 focus:ring-primary text-sm flex-1"
-              >
-                <option value="all">All Lists</option>
-                {lists.map(list => (
-                  <option key={list._id} value={list._id}>{list.name}</option>
-                ))}
-              </select>
-              {selectedList !== 'all' && (
-                <div className="flex items-center gap-2 pr-2">
-                  <button
-                    onClick={() => handleOpenListManagement(currentList)}
-                    className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-accent transition-all rounded"
-                    title="Edit list"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteList(selectedList)}
-                    className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all rounded"
-                    title="Delete list"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={handleCreateList}
-              className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-all rounded-md"
-              title="Add new list"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex bg-secondary p-1 border border-border rounded-md">
-              <button
-                onClick={() => setView('list')}
-                className={cn("p-2 transition-all", view === 'list' ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
-              >
-                <LayoutList className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setView('kanban')}
-                className={cn("p-2 transition-all", view === 'kanban' ? "bg-primary text-white shadow-sm" : "text-muted-foreground hover:text-foreground")}
-              >
-                <LayoutGrid className="w-4 h-4" />
-              </button>
-            </div>
-            <button
-              onClick={openNewTaskModal}
-              className="bg-primary text-primary-foreground px-3 sm:px-4 py-2 flex items-center gap-2 font-medium hover:opacity-90 transition-opacity text-sm sm:text-base"
-            >
-              <Plus className="w-4 h-4" />
-              New Task
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex-1 overflow-hidden">
-        {view === 'list' ? (
-          <div className="bg-secondary/50 border border-border overflow-hidden h-full flex flex-col rounded-lg">
-            <div className="grid grid-cols-12 gap-4 px-4 sm:px-6 py-3 border-b border-border text-xs font-semibold text-muted-foreground uppercase tracking-wider bg-secondary">
-              <div className="col-span-4 sm:col-span-5">Task</div>
-              <div className="col-span-2 text-center hidden sm:block">Priority</div>
-              <div className="col-span-2 text-center hidden sm:block">Status</div>
-              <div className="col-span-2 text-center hidden md:block">Due Date</div>
-              <div className="col-span-2 sm:col-span-1 text-right">Action</div>
-            </div>
-            <div className="divide-y divide-border overflow-y-auto flex-1">
-              {filteredTasks.map(task => (
-                <div key={task._id} className="grid grid-cols-12 gap-4 px-4 sm:px-6 py-4 items-center hover:bg-accent/50 transition-colors group cursor-pointer" onContextMenu={(e) => handleTaskContextMenu(e, task)} onClick={() => handleTaskClick(task)}>
-                  <div className="col-span-4 sm:col-span-5 flex flex-col gap-2">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleToggleComplete(task);
-                        }}
-                        className="text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        {task.status === 'completed' ? <CheckCircle2 className="w-5 h-5 text-green-500" /> : <Circle className="w-5 h-5" />}
-                      </button>
-                      <span className={cn("font-medium transition-all", task.status === 'completed' && "line-through text-muted-foreground")}>
-                        {task.title}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <Tag className="w-3 h-3" />
-                        {getListName(task.list)}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        Added {formatDate(task.createdAt)}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="col-span-2 flex justify-center hidden sm:flex">
-                    <span className={cn(
-                      "px-2 py-0.5 text-[10px] font-bold uppercase border border-border bg-background",
-                      task.priority === 'high' ? "text-red-500" :
-                      task.priority === 'medium' ? "text-orange-500" : "text-blue-500"
-                    )}>
-                      {task.priority}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex justify-center text-sm text-muted-foreground hidden sm:flex">
-                    {(() => {
-                      const options = getStatusOptionsForTask(task, lists);
-                      const selectedValue = options.some(status => status.id === task.status) ? task.status : 'unassigned';
-                      return (
-                        <select
-                          value={selectedValue}
-                          onClick={(e) => e.stopPropagation()}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onChange={(e) => {
-                            e.stopPropagation();
-                            handleStatusChange(task, e.target.value);
-                          }}
-                          className="rounded border border-border bg-background px-2 py-1 text-sm text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                        >
-                          {options.map(status => (
-                            <option key={status.id} value={status.id}>{status.label}</option>
-                          ))}
-                        </select>
-                      );
-                    })()}
-                  </div>
-                  <div className="col-span-2 flex justify-center text-sm hidden md:flex">
-                    <div className={cn("flex items-center gap-1.5", isTaskOverdue(task) ? "text-red-600" : "text-muted-foreground") }>
-                      <Calendar className="w-3 h-3" />
-                      {formatDate(task.dueDate)}
-                    </div>
-                  </div>
-                  <div className="col-span-2 sm:col-span-1 flex justify-end">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingTask(task);
-                          setIsModalOpen(true);
-                        }}
-                        className="p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-all mr-1"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm('Are you sure you want to delete this task?')) {
-                            handleTaskDelete(task._id);
-                          }
-                        }}
-                        className="p-1.5 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-all"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-              ))}
-              {filteredTasks.length === 0 && (
-                <div className="p-8 text-center text-muted-foreground">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p className="text-sm sm:text-base">No tasks found. {selectedList === 'all' ? 'Add one!' : 'Try selecting a different list.'}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 h-full">
-            {currentList && !hasStatuses ? (
-              <div className="col-span-1 md:col-span-3 flex flex-col items-center justify-center rounded-lg border border-border bg-secondary/10 p-8 text-center">
-                <button
-                  onClick={() => handleOpenListManagement(currentList)}
-                  className="mb-4 inline-flex items-center justify-center rounded-full border border-dashed border-border bg-background p-5 text-muted-foreground hover:border-primary hover:text-primary transition-all"
-                  title="Add status"
-                >
-                  <Plus className="w-6 h-6" />
-                </button>
-                <p className="text-sm text-muted-foreground">No statuses yet. Add a status to start organizing this list.</p>
-              </div>
-            ) : (
-              statusColumns.map(col => (
-                <div
-                  key={col.id}
-                  onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(col.id)}
-                  className="flex flex-col gap-4 bg-secondary/20 p-4 border border-border rounded-lg transition-all hover:border-primary/50 hover:bg-secondary/30"
-                >
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: col.color }}
-                    />
-                    <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">{col.label}</h3>
-                    <div className="ml-auto flex items-center gap-2">
-                      <span className="px-2 py-0.5 bg-secondary border border-border text-xs rounded-full">
-                        {filteredTasks.filter(t => t.status === col.id).length}
-                      </span>
-                      {currentList && col.id === statusColumns[statusColumns.length - 1]?.id && (
-                        <button
-                          onClick={() => handleOpenListManagement(currentList)}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground hover:border-primary hover:text-primary transition-all"
-                          title="Add status"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-3">
-                    {filteredTasks.filter(t => t.status === col.id).map(task => (
-                      <div
-                      key={task._id}
-                      draggable
-                      onDragStart={() => handleDragStart(task)}
-                      onContextMenu={(e) => handleTaskContextMenu(e, task)}
-                      className={cn("p-4 bg-background border transition-all cursor-move group rounded-lg opacity-100 hover:opacity-95 active:opacity-75", isTaskOverdue(task) ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20" : "border-border hover:border-primary/50")}
-                      onClick={() => handleTaskClick(task)}
-                    >
-                      <div className="flex justify-between items-start mb-3">
-                        <span className={cn(
-                          "px-2 py-0.5 text-[10px] font-bold uppercase border border-border rounded",
-                          task.priority === 'high' ? "bg-red-500/10 text-red-500" :
-                          task.priority === 'medium' ? "bg-orange-500/10 text-orange-500" : "bg-blue-500/10 text-blue-500"
-                        )}>
-                          {task.priority}
-                        </span>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleComplete(task);
-                            }}
-                            className="p-1 text-muted-foreground hover:text-primary transition-colors"
-                          >
-                            {task.status === 'completed' ? <CheckCircle2 className="w-3 h-3" /> : <Circle className="w-3 h-3" />}
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingTask(task);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                          >
-                            <Edit className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (window.confirm('Are you sure you want to delete this task?')) {
-                                handleTaskDelete(task._id);
-                              }
-                            }}
-                            className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className={cn(
-                        "font-medium mb-4 leading-relaxed",
-                        task.status === 'completed' && "line-through text-muted-foreground"
-                      )}>
-                        {task.title}
-                      </p>
-                      <div className={cn("flex items-center justify-between text-xs", isTaskOverdue(task) ? "text-red-600" : "text-muted-foreground") }>
-                        <div className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {formatDate(task.dueDate)}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Tag className="w-3 h-3" />
-                          {getListName(task.list)}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <button
-                    onClick={openNewTaskModal}
-                    className="w-full py-3 border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all flex items-center justify-center gap-2 text-sm bg-secondary/50 rounded-lg"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Task
-                  </button>
-                </div>
-              </div>
-            ))
-            )}
-          </div>
-        )}
-      {contextMenuTask && (
-        <div
-          style={{ left: contextMenuPosition.x, top: contextMenuPosition.y }}
-          className="fixed z-50 w-56 rounded-lg border border-border bg-background shadow-2xl"
-        >
-          <div className="p-3 border-b border-border text-sm font-semibold">Move task to</div>
-          <div className="flex flex-col p-2 gap-1">
-            {lists.filter(list => list._id !== contextMenuTask.list).map(list => (
-              <button
-                key={list._id}
-                onClick={() => handleMoveTask(contextMenuTask, list._id)}
-                className="text-left rounded-md px-3 py-2 text-sm text-foreground hover:bg-accent transition-colors"
-              >
-                {list.name}
-              </button>
-            ))}
-            {lists.filter(list => list._id !== contextMenuTask.list).length === 0 && (
-              <div className="px-3 py-2 text-sm text-muted-foreground">No other lists available.</div>
-            )}
-          </div>
-        </div>
-      )}
-      </div>
     </div>
   );
 };

@@ -10,7 +10,8 @@ import {
   Timer,
   Settings,
   Globe,
-  LogOut
+  LogOut,
+  X
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -30,10 +31,21 @@ const navItems = [
   { icon: Globe, label: 'Translator', path: '/translator' },
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
   return (
-    <aside className="w-64 h-full bg-secondary border-r border-border flex flex-col p-4 gap-8">
+    <aside
+      className={cn(
+        "fixed inset-y-0 left-0 z-50 w-64 h-full bg-secondary border-r border-border flex flex-col p-4 gap-8 transition-transform duration-300 md:relative md:translate-x-0",
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      )}
+    >
       <div className="flex items-center gap-3 px-2 py-4">
+        <button
+          className="md:hidden absolute top-4 right-4 p-2 rounded-full text-foreground hover:bg-accent"
+          onClick={onClose}
+        >
+          <X className="w-6 h-6" />
+        </button>
         <div className="relative flex items-center justify-center w-10 h-10 overflow-hidden">
           <div className="absolute w-[200%] h-[200%] bg-[conic-gradient(from_0deg,transparent_0_75%,hsl(var(--primary))_100%)] animate-[spin_3s_linear_infinite]" />
           <div className="relative z-10 flex items-center justify-center w-[calc(100%-4px)] h-[calc(100%-4px)] bg-secondary">
@@ -56,6 +68,7 @@ const Sidebar = () => {
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )
             }
+            onClick={onClose} // Close sidebar on nav item click
           >
             <item.icon className="w-5 h-5" />
             <span className="font-medium">{item.label}</span>
@@ -70,6 +83,7 @@ const Sidebar = () => {
             cn("flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
             isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")
           }
+          onClick={onClose} // Close sidebar on nav item click
         >
           <Settings className="w-5 h-5" />
           <span className="font-medium">Settings</span>

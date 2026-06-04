@@ -96,22 +96,22 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">Welcome back! 👋</h1>
-        <p className="text-muted-foreground">Here's what's happening with your productivity today.</p>
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+      <header className="text-center sm:text-left">
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back! 👋</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Here's what's happening with your productivity today.</p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
         <div
           onClick={() => navigate('/tasks')}
-          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-muted-foreground">Tasks Due Today</p>
-            <Clock className="w-5 h-5 text-muted-foreground" />
+            <p className="text-xs sm:text-sm text-muted-foreground">Tasks Due Today</p>
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
-          <p className="text-3xl font-bold group-hover:text-primary transition-colors">{stats.tasksDue}</p>
+          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.tasksDue}</p>
           {stats.overdueTasks > 0 && (
             <p className="text-xs text-red-500 mt-1">{stats.overdueTasks} overdue</p>
           )}
@@ -119,117 +119,117 @@ const Dashboard = () => {
 
         <div
           onClick={() => navigate('/tasks')}
-          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-muted-foreground">Completed Tasks</p>
-            <CheckCircle className="w-5 h-5 text-muted-foreground" />
+            <p className="text-xs sm:text-sm text-muted-foreground">Completed Tasks</p>
+            <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
-          <p className="text-3xl font-bold group-hover:text-primary transition-colors">{stats.tasksCompleted}</p>
+          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.tasksCompleted}</p>
           <p className="text-xs text-green-500 mt-1">Total completed</p>
         </div>
 
         <div
           onClick={() => navigate('/calendar')}
-          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-muted-foreground">Upcoming Events</p>
-            <Calendar className="w-5 h-5 text-muted-foreground" />
+            <p className="text-xs sm:text-sm text-muted-foreground">Upcoming Events</p>
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
-          <p className="text-3xl font-bold group-hover:text-primary transition-colors">{stats.upcomingEvents}</p>
+          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.upcomingEvents}</p>
           <p className="text-xs text-blue-500 mt-1">Scheduled ahead</p>
         </div>
 
         <div
           onClick={() => navigate('/notes')}
-          className="p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
+          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
         >
           <div className="flex items-center justify-between mb-2">
-            <p className="text-sm text-muted-foreground">Notes</p>
-            <FileText className="w-5 h-5 text-muted-foreground" />
+            <p className="text-xs sm:text-sm text-muted-foreground">Notes</p>
+            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
           </div>
-          <p className="text-3xl font-bold group-hover:text-primary transition-colors">{stats.notes}</p>
+          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.notes}</p>
           <p className="text-xs text-purple-500 mt-1">Total notes</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 p-6 rounded-2xl bg-secondary border border-border">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="lg:col-span-2 p-5 sm:p-6 rounded-2xl bg-secondary border border-border">
           <h3
             onClick={() => navigate('/tasks')}
-            className="text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+            className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
           >
-            <TrendingUp className="w-5 h-5" />
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
             Recent Tasks
           </h3>
           {recentTasks.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {recentTasks.map((task) => (
                 <div
                   key={task._id}
                   onClick={() => navigate('/tasks')}
                   className="flex items-center justify-between p-3 rounded-lg bg-background border border-border cursor-pointer hover:border-primary/50 transition-colors"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3">
                     <div className={cn(
-                      "w-3 h-3 rounded-full",
+                      "w-2 h-2 sm:w-3 sm:h-3 rounded-full",
                       task.status === 'completed' ? "bg-green-500" :
                       task.priority === 'high' ? "bg-red-500" :
                       task.priority === 'medium' ? "bg-orange-500" : "bg-blue-500"
                     )} />
                     <div>
-                      <p className="font-medium">{task.title}</p>
-                      <p className="text-sm text-muted-foreground">{task.status}</p>
+                      <p className="font-medium text-sm sm:text-base">{task.title}</p>
+                      <p className="text-xs text-muted-foreground">{task.status}</p>
                     </div>
                   </div>
                   {task.dueDate && (
                     <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Due</p>
-                      <p className="text-sm font-medium">{new Date(task.dueDate).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">Due</p>
+                      <p className="text-xs sm:text-sm font-medium">{new Date(task.dueDate).toLocaleDateString()}</p>
                     </div>
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>No tasks yet. Create your first task to get started!</p>
+            <div className="text-center py-6 sm:py-8 text-muted-foreground">
+              <FileText className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm sm:text-base">No tasks yet. Create your first task to get started!</p>
             </div>
           )}
         </div>
 
-        <div className="p-6 rounded-2xl bg-secondary border border-border">
+        <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border">
           <h3
             onClick={() => navigate('/calendar')}
-            className="text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+            className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
           >
-            <Calendar className="w-5 h-5" />
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
             Upcoming Events
           </h3>
           {upcomingEvents.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {upcomingEvents.map((event) => (
                 <div
                   key={event._id}
                   onClick={() => navigate('/calendar')}
                   className="p-3 rounded-lg bg-background border border-border cursor-pointer hover:border-primary/50 transition-colors"
                 >
-                  <p className="font-medium">{event.title}</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="font-medium text-sm sm:text-base">{event.title}</p>
+                  <p className="text-xs text-muted-foreground">
                     {new Date(event.start).toLocaleDateString()} at {new Date(event.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
                   {event.location && (
-                    <p className="text-sm text-muted-foreground">{event.location}</p>
+                    <p className="text-xs text-muted-foreground">{event.location}</p>
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>No upcoming events. Schedule your first event!</p>
+            <div className="text-center py-6 sm:py-8 text-muted-foreground">
+              <Calendar className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
+              <p className="text-sm sm:text-base">No upcoming events. Schedule your first event!</p>
             </div>
           )}
         </div>
