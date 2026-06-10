@@ -18,6 +18,7 @@ app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/sleep', require('./routes/sleepRoutes'));
 app.use('/api/money', require('./routes/moneyRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
+app.use('/api/habits', require('./routes/habitRoutes'));
 
 app.get('/', (req, res) => {
   res.send('Bickle API is running...');

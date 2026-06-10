@@ -1268,7 +1268,7 @@ const TaskPage = () => {
         task={selectedTask}
         lists={lists}
         onUpdate={handleUpdateTask}
-        onDelete={handleDeleteTask}
+        onDelete={handleTaskDelete}
         onEdit={(task) => {
           setEditingTask(task);
           setIsModalOpen(true);

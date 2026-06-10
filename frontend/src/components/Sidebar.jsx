@@ -11,7 +11,8 @@ import {
   Settings,
   Globe,
   LogOut,
-  X
+  X,
+  Tally4
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -23,6 +24,7 @@ function cn(...inputs) {
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
+  { icon: Tally4, label: 'Habits', path: '/habits' },
   { icon: Timer, label: 'Focus', path: '/focus' },
   { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
   { icon: FileText, label: 'Notes', path: '/notes' },

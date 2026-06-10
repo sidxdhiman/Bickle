@@ -12,6 +12,7 @@ import Settings from './pages/Settings';
 import Focus from './pages/Focus';
 import Login from './pages/Login';
 import Translator from './pages/Translator';
+import Habits from './pages/Habits';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -49,7 +50,7 @@ const App = () => {
 
   if (!isAuthenticated) {
     return (
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
           <Route path="/*" element={<Login onAuthSuccess={() => setIsAuthenticated(true)} />} />
         </Routes>
@@ -58,7 +59,7 @@ const App = () => {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <Routes>
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Dashboard />} />
@@ -70,6 +71,7 @@ const App = () => {
           <Route path="focus" element={<Focus />} />
           <Route path="settings" element={<Settings />} />
           <Route path="translator" element={<Translator />} />
+          <Route path="habits" element={<Habits />} />
         </Route>
       </Routes>
     </BrowserRouter>
