@@ -8,4 +8,5 @@ Bickle is a personal productivity hub — built for the way your brain actually 
   <sub>Named after Travis Bickle (Robert De Niro). You talkin' to me?.</sub>
 </div>
 
-Currently this project has been paused. This will be resumed in a few days from this readme commit. 
+
+This project has currently been paused. This will be resumed in a few days from this readme commit. 
