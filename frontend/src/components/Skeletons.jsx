@@ -284,6 +284,48 @@ export const WhiteboardSkeleton = () => {
   );
 };
 
+export const PdfEditorSkeleton = () => {
+  return (
+    <div className="h-full flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-4">
+        <Skeleton className="h-8 w-40" />
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-10 w-28" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+      </div>
+      <div className="flex-1 flex gap-6 h-[calc(100vh-160px)]">
+        <div className="w-64 flex flex-col gap-4 shrink-0">
+          <div className="p-4 rounded-2xl bg-secondary border border-border space-y-3">
+            <Skeleton className="h-3 w-16 mb-1" />
+            <div className="grid grid-cols-2 gap-2">
+              {[...Array(10)].map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          </div>
+          <div className="p-4 rounded-2xl bg-secondary border border-border space-y-3">
+            <Skeleton className="h-3 w-24 mb-1" />
+            {[...Array(6)].map((_, i) => (
+              <Skeleton key={i} className="h-6 w-full" />
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 bg-secondary/50 border border-border rounded-2xl flex flex-col overflow-hidden">
+          <div className="p-2 border-b border-border flex items-center gap-2">
+            {[...Array(7)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-8" />
+            ))}
+          </div>
+          <div className="flex-1 bg-[#1b1b1f] flex items-start justify-center p-6">
+            <Skeleton className="w-[600px] h-[800px] rounded-none" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const SettingsSkeleton = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-8">

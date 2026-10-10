@@ -14,6 +14,7 @@ import Login from './pages/Login';
 import Translator from './pages/Translator';
 import Habits from './pages/Habits';
 import Whiteboard from './pages/Whiteboard';
+import PdfEditor from './pages/PdfEditor';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -74,6 +75,7 @@ const App = () => {
           <Route path="translator" element={<Translator />} />
           <Route path="habits" element={<Habits />} />
           <Route path="whiteboard" element={<Whiteboard />} />
+          <Route path="pdf-editor" element={<PdfEditor />} />
         </Route>
       </Routes>
     </BrowserRouter>
