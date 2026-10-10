@@ -251,6 +251,39 @@ export const SleepSkeleton = () => {
   );
 };
 
+export const WhiteboardSkeleton = () => {
+  return (
+    <div className="h-full flex flex-col gap-6">
+      <div className="flex items-center justify-between gap-4">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-10 w-32" />
+      </div>
+      <div className="flex-1 flex gap-6 h-[calc(100vh-160px)]">
+        <div className="w-64 hidden md:flex flex-col gap-4 shrink-0">
+          <div className="p-4 rounded-2xl bg-secondary border border-border space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+          <div className="p-4 rounded-2xl bg-secondary border border-border space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-6 w-full" />
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 bg-secondary/50 border border-border rounded-2xl flex flex-col overflow-hidden">
+          <div className="p-2 border-b border-border flex gap-1">
+            {[...Array(9)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-8" />
+            ))}
+          </div>
+          <Skeleton className="flex-1 w-full rounded-none" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const SettingsSkeleton = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-8">

@@ -13,6 +13,7 @@ import Focus from './pages/Focus';
 import Login from './pages/Login';
 import Translator from './pages/Translator';
 import Habits from './pages/Habits';
+import Whiteboard from './pages/Whiteboard';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -72,6 +73,7 @@ const App = () => {
           <Route path="settings" element={<Settings />} />
           <Route path="translator" element={<Translator />} />
           <Route path="habits" element={<Habits />} />
+          <Route path="whiteboard" element={<Whiteboard />} />
         </Route>
       </Routes>
     </BrowserRouter>

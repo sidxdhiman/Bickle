@@ -12,7 +12,8 @@ import {
   Globe,
   LogOut,
   X,
-  Tally4
+  Tally4,
+  PenTool
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -28,6 +29,7 @@ const navItems = [
   { icon: Timer, label: 'Focus', path: '/focus' },
   { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
   { icon: FileText, label: 'Notes', path: '/notes' },
+  { icon: PenTool, label: 'Whiteboard', path: '/whiteboard' },
   { icon: Moon, label: 'Sleep', path: '/sleep' },
   { icon: DollarSign, label: 'Money', path: '/money' },
   { icon: Globe, label: 'Translator', path: '/translator' },
