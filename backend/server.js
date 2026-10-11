@@ -3,6 +3,11 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
+if (!process.env.JWT_SECRET) {
+  console.warn('Warning: JWT_SECRET is not set. Using an insecure development secret.');
+  process.env.JWT_SECRET = 'bickle-dev-secret-change-me';
+}
+
 const app = express();
 
 // Middleware

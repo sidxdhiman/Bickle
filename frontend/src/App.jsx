@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import axios from 'axios';
+import { ensureBackendToken } from './utils/backendAuth';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
@@ -29,17 +30,23 @@ const App = () => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const unlocked = localStorage.getItem('authUnlocked') === 'true';
-    const token = localStorage.getItem('token');
+    const init = async () => {
+      const unlocked = localStorage.getItem('authUnlocked') === 'true';
+      const token = localStorage.getItem('token');
 
-    if (unlocked && token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setIsAuthenticated(true);
-    } else {
-      localStorage.removeItem('authUnlocked');
-    }
+      if (unlocked && token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // Make sure we are holding a valid backend token before loading data.
+        await ensureBackendToken();
+        setIsAuthenticated(true);
+      } else {
+        localStorage.removeItem('authUnlocked');
+      }
 
-    setHasCheckedAuth(true);
+      setHasCheckedAuth(true);
+    };
+
+    init();
   }, []);
 
   if (error) {

@@ -41,7 +41,7 @@ const isTaskOverdue = (task) => {
   return due < new Date();
 };
 
-const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListId = '' }) => {
+const TaskModal = ({ isOpen, onClose, onSubmit, lists, onCreateList, task = null, defaultListId = '' }) => {
   const getDefaultStatusForList = (listId) => {
     const list = lists.find(l => l._id === listId);
     return list?.statuses?.[0]?.id || 'todo';
@@ -60,13 +60,13 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
     dueDate: '',
     tags: []
   });
+  const [isListModalOpen, setIsListModalOpen] = useState(false);
 
   const selectedListObj = lists.find(l => l._id === formData.list);
   let statusOptions = selectedListObj?.statuses || defaultStatusOptions;
   if (!statusOptions.some(status => status.id === formData.status)) {
     statusOptions = [{ id: 'unassigned', label: '-' }, ...statusOptions];
   }
-
 
   const handleListChange = (e) => {
     const selectedListId = e.target.value;
@@ -76,6 +76,18 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
       list: selectedListId,
       status: defaultStatus,
     }));
+  };
+
+  const handleCreateListFromTask = async (listData) => {
+    const newList = await onCreateList(listData);
+    if (newList) {
+      setFormData(prev => ({
+        ...prev,
+        list: newList._id,
+        status: newList.statuses?.[0]?.id || 'todo',
+      }));
+    }
+    return newList;
   };
 
   useEffect(() => {
@@ -103,7 +115,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
         tags: []
       });
     }
-  }, [isOpen, task, lists, defaultListId]);
+  }, [isOpen, task, defaultListId]);
 
 
   if (!isOpen) return null;
@@ -167,16 +179,29 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
 
           <div>
             <label className="block text-sm font-semibold text-foreground mb-2">List</label>
-            <select
-              required
-              value={formData.list}
-              onChange={handleListChange}
-              className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm transition-colors"
-            >
-              {lists.map(list => (
-                <option key={list._id} value={list._id}>{list.name}</option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                required
+                value={formData.list}
+                onChange={handleListChange}
+                className="w-full px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary text-sm transition-colors"
+              >
+                {lists.length === 0 && (
+                  <option value="" disabled>No lists available</option>
+                )}
+                {lists.map(list => (
+                  <option key={list._id} value={list._id}>{list.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setIsListModalOpen(true)}
+                title="Create new list"
+                className="shrink-0 px-3 py-2 bg-secondary text-secondary-foreground border border-border rounded-md hover:bg-accent transition-colors flex items-center justify-center"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -233,6 +258,12 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, task = null, defaultListI
           </div>
         </form>
       </div>
+
+      <CreateListModal
+        isOpen={isListModalOpen}
+        onClose={() => setIsListModalOpen(false)}
+        onCreate={handleCreateListFromTask}
+      />
     </div>
   );
 };
@@ -494,7 +525,7 @@ const CreateListModal = ({ isOpen, onClose, onCreate }) => {
   );
 };
 
-const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
+const ListManagementModal = ({ isOpen, onClose, list, onUpdate, onDelete }) => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -504,6 +535,7 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
   const [editingStatusIndex, setEditingStatusIndex] = useState(null);
   const [editingStatusColor, setEditingStatusColor] = useState('#6366f1');
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -514,6 +546,7 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
         statuses: list.statuses || [],
       });
       setError('');
+      setDeleting(false);
     }
   }, [list]);
 
@@ -566,6 +599,22 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
       setError('Failed to save changes. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteList = async () => {
+    if (!window.confirm('Do you really want to delete this list and all of its tasks? This cannot be undone.')) {
+      return;
+    }
+    setDeleting(true);
+    setError('');
+    try {
+      await onDelete(list._id);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting list:', error);
+      setError('Failed to delete list. Please try again.');
+      setDeleting(false);
     }
   };
 
@@ -707,18 +756,30 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate }) => {
             </div>
           )}
 
+          <div className="pt-4 border-t border-border">
+            <button
+              type="button"
+              onClick={handleDeleteList}
+              disabled={loading || deleting}
+              className="w-full flex items-center justify-center gap-2 py-2 border border-destructive/30 bg-destructive/10 text-destructive rounded-md hover:bg-destructive/20 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              <Trash2 className="w-4 h-4" />
+              {deleting ? 'Deleting...' : 'Delete List'}
+            </button>
+          </div>
+
           <div className="flex gap-3 pt-4 border-t border-border">
             <button
               type="button"
               onClick={onClose}
-              disabled={loading}
+              disabled={loading || deleting}
               className="flex-1 bg-secondary text-secondary-foreground py-2 rounded-md hover:bg-secondary/80 transition-colors text-sm font-medium disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || deleting}
               className="flex-1 bg-primary text-primary-foreground py-2 rounded-md hover:bg-primary/90 transition-colors text-sm font-medium disabled:opacity-50"
             >
               {loading ? 'Saving...' : 'Save Changes'}
@@ -879,16 +940,15 @@ const TaskPage = () => {
 
   // List management handlers
   const handleDeleteList = async (listId) => {
-    if (window.confirm('Are you sure you want to delete this list and all its tasks?')) {
-      try {
-        await axios.delete(`/lists/${listId}`);
-        setLists(prev => prev.filter(l => l._id !== listId));
-        if (selectedList === listId) {
-          setSelectedList('all');
-        }
-      } catch (error) {
-        console.error('Error deleting list:', error);
-      }
+    await axios.delete(`/lists/${listId}`);
+    setLists(prev => prev.filter(l => l._id !== listId));
+    setTasks(prev => prev.filter(task => task.list !== listId));
+    if (selectedList === listId) {
+      setSelectedList('all');
+    }
+    if (selectedTask?.list === listId) {
+      setSelectedTask(null);
+      setIsDetailModalOpen(false);
     }
   };
 
@@ -897,22 +957,15 @@ const TaskPage = () => {
     setIsListManagementOpen(true);
   };
 
-  const handleCreateList = () => {
-    setIsCreateListOpen(true);
-  };
-
   const handleCreateListSubmit = async (listData) => {
-    try {
-      const res = await axios.post('/lists', {
-        ...listData,
-        isFavorite: false,
-        statuses: defaultStatusOptions,
-      });
-      setLists(prev => [...prev, res.data]);
-      setSelectedList(res.data._id);
-    } catch (error) {
-      console.error('Error creating list:', error);
-    }
+    const res = await axios.post('/lists', {
+      ...listData,
+      isFavorite: false,
+      statuses: defaultStatusOptions,
+    });
+    setLists(prev => [...prev, res.data]);
+    setSelectedList(res.data._id);
+    return res.data;
   };
 
   const handleListManagementUpdate = async () => {
@@ -1249,6 +1302,7 @@ const TaskPage = () => {
         onClose={() => setIsModalOpen(false)}
         onSubmit={handleCreateTask}
         lists={lists}
+        onCreateList={handleCreateListSubmit}
         defaultListId={selectedList !== 'all' ? selectedList : (lists.length > 0 ? lists[0]._id : '')}
       />
 
@@ -1258,6 +1312,7 @@ const TaskPage = () => {
           onClose={() => setEditingTask(null)}
           onSubmit={handleUpdateTask}
           lists={lists}
+          onCreateList={handleCreateListSubmit}
           task={editingTask}
         />
       )}
@@ -1278,13 +1333,14 @@ const TaskPage = () => {
       <CreateListModal
         isOpen={isCreateListOpen}
         onClose={() => setIsCreateListOpen(false)}
-        onCreate={handleCreateList}
+        onCreate={handleCreateListSubmit}
       />
 
       <ListManagementModal
         isOpen={isListManagementOpen}
         onClose={() => setIsListManagementOpen(false)}
         list={editingList}
+        onDelete={handleDeleteList}
         onUpdate={() => {
           // Re-fetch lists and tasks to ensure data consistency after list update
           // This is a simplified approach, a more robust solution would update local state intelligently

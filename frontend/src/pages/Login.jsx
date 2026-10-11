@@ -1,16 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { ensureBackendToken } from '../utils/backendAuth';
 
 const PERSONAL_ACCESS = {
   id: 'a1e6tp8k',
   password: '0]Hyisgh',
-};
-
-const BACKEND_CREDENTIALS = {
-  email: 'dev@bickle.com',
-  password: 'password',
-  username: 'devuser',
 };
 
 const Login = ({ onAuthSuccess }) => {
@@ -36,30 +31,12 @@ const Login = ({ onAuthSuccess }) => {
       localStorage.setItem('token', localToken);
       localStorage.setItem('authUnlocked', 'true');
       axios.defaults.headers.common['Authorization'] = `Bearer ${localToken}`;
+
+      // Obtain a real backend token so all API calls are authorized.
+      await ensureBackendToken();
+
       onAuthSuccess();
       navigate('/');
-
-      // Try to fetch a real backend token in the background, but don't block login.
-      if (!localStorage.getItem('backendToken')) {
-        try {
-          const res = await axios.post('/auth/login', {
-            email: BACKEND_CREDENTIALS.email,
-            password: BACKEND_CREDENTIALS.password,
-          });
-          localStorage.setItem('backendToken', res.data.token);
-          localStorage.setItem('token', res.data.token);
-          axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-        } catch (err) {
-          try {
-            const res = await axios.post('/auth/register', BACKEND_CREDENTIALS);
-            localStorage.setItem('backendToken', res.data.token);
-            localStorage.setItem('token', res.data.token);
-            axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.token}`;
-          } catch (registerErr) {
-            console.warn('Backend token unavailable; continuing with local unlock.', registerErr);
-          }
-        }
-      }
     } catch (err) {
       console.error('Login failed:', err);
       setError('Unable to unlock the app. Please try again.');
