@@ -18,6 +18,7 @@ app.use(express.json());
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/lists', require('./routes/listRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
+app.use('/api/guest', require('./routes/guestRoutes'));
 app.use('/api/calendar', require('./routes/calendarRoutes'));
 app.use('/api/notes', require('./routes/noteRoutes'));
 app.use('/api/sleep', require('./routes/sleepRoutes'));

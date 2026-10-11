@@ -1,43 +1,19 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import {
-  LayoutDashboard,
-  CheckSquare,
-  Calendar as CalendarIcon,
-  FileText,
-  Moon,
-  DollarSign,
-  Timer,
-  Settings,
-  Globe,
-  LogOut,
-  X,
-  Tally4,
-  PenTool,
-  FilePen
-} from 'lucide-react';
+import { Settings, LogOut, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { PAGES } from '../config/pages';
+import { useAccess } from '../context/AccessContext';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-  { icon: CheckSquare, label: 'Tasks', path: '/tasks' },
-  { icon: Tally4, label: 'Habits', path: '/habits' },
-  { icon: Timer, label: 'Focus', path: '/focus' },
-  { icon: CalendarIcon, label: 'Calendar', path: '/calendar' },
-  { icon: FileText, label: 'Notes', path: '/notes' },
-  { icon: PenTool, label: 'Whiteboard', path: '/whiteboard' },
-  { icon: FilePen, label: 'PDF Editor', path: '/pdf-editor' },
-  { icon: Moon, label: 'Sleep', path: '/sleep' },
-  { icon: DollarSign, label: 'Money', path: '/money' },
-  { icon: Globe, label: 'Translator', path: '/translator' },
-];
-
 const Sidebar = ({ isOpen, onClose }) => {
+  const { isGuest, allowedPages, endGuest } = useAccess();
+  const navItems = PAGES.filter((page) => allowedPages.includes(page.key));
+
   return (
     <aside
       className={cn(
@@ -61,43 +37,59 @@ const Sidebar = ({ isOpen, onClose }) => {
         <span className="text-xl font-bold tracking-tight">Bickle</span>
       </div>
 
-      <nav className="flex-1 flex flex-col gap-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              )
-            }
-            onClick={onClose} // Close sidebar on nav item click
-          >
-            <item.icon className="w-5 h-5" />
-            <span className="font-medium">{item.label}</span>
-          </NavLink>
-        ))}
+      <nav className="flex-1 flex flex-col gap-2 overflow-y-auto">
+        {navItems.length === 0 ? (
+          <p className="text-sm text-muted-foreground px-2">No modules are available for this session.</p>
+        ) : (
+          navItems.map((item) => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group",
+                  isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )
+              }
+              onClick={onClose}
+            >
+              <item.icon className="w-5 h-5" />
+              <span className="font-medium">{item.label}</span>
+            </NavLink>
+          ))
+        )}
       </nav>
 
       <div className="mt-auto pt-4 border-t border-border flex flex-col gap-2">
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn("flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
-            isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")
-          }
-          onClick={onClose} // Close sidebar on nav item click
-        >
-          <Settings className="w-5 h-5" />
-          <span className="font-medium">Settings</span>
-        </NavLink>
-        <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive transition-all duration-200">
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium">Logout</span>
-        </button>
+        {!isGuest && (
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              cn("flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
+              isActive ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground")
+            }
+            onClick={onClose}
+          >
+            <Settings className="w-5 h-5" />
+            <span className="font-medium">Settings</span>
+          </NavLink>
+        )}
+        {isGuest ? (
+          <button
+            onClick={endGuest}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive transition-all duration-200"
+          >
+            <LogOut className="w-5 h-5" />
+            <span className="font-medium">Leave session</span>
+          </button>
+        ) : (
+          <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive transition-all duration-200">
+            <LogOut className="w-5 h-5" />
+            <span className="font-medium">Logout</span>
+          </button>
+        )}
       </div>
     </aside>
   );
