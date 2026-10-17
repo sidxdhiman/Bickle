@@ -13,3 +13,4 @@ This currently has a task manager, calender, todo list, sleep time calc
 
 This project has currently been paused. This will be resumed in a few days from this readme commit. 
 
+Edit - This project has been resumed. It will be soon hosted and be ready for usage.
