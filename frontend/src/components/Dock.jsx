@@ -185,13 +185,17 @@ const Dock = () => {
             : { right: `calc(100% + ${8 + extra}px)`, top: '50%', transform: 'translateY(-50%)' }
           : { bottom: `calc(100% + ${8 + extra}px)`, left: '50%', transform: 'translateX(-50%)' };
 
-        const tileAlpha = isHot ? 0.22 : 0.12;
-        const customTileBg =
-          showTiles && color !== 'auto'
-            ? hexLuminance(color) > 0.5
-              ? `rgba(0, 0, 0, ${tileAlpha})`
-              : `rgba(255, 255, 255, ${tileAlpha})`
-            : undefined;
+        const dockIsLight = color !== 'auto' && hexLuminance(color) > 0.5;
+        let customTileBg;
+        if (showTiles && color !== 'auto') {
+          customTileBg = dockIsLight
+            ? isHot
+              ? 'rgba(255, 255, 255, 0.96)'
+              : 'rgba(0, 0, 0, 0.06)'
+            : isHot
+              ? 'rgba(0, 0, 0, 0.92)'
+              : 'rgba(255, 255, 255, 0.1)';
+        }
 
         const inner = (
           <span
@@ -205,9 +209,10 @@ const Dock = () => {
               height: size,
               borderRadius: tileRadius,
               backgroundColor: customTileBg,
+              boxShadow: isHot && showTiles ? '0 4px 14px rgba(0, 0, 0, 0.28)' : undefined,
               transform: `scale(${scale.toFixed(3)})`,
               transformOrigin,
-              transition: 'transform 120ms ease-out, background-color 150ms ease',
+              transition: 'transform 120ms ease-out, background-color 150ms ease, box-shadow 150ms ease',
             }}
           >
             <span className="flex h-full w-full items-center justify-center select-none">
@@ -229,7 +234,7 @@ const Dock = () => {
                 cellRefs.current[index] = el;
               }}
               className="relative flex flex-col items-center"
-              style={{ width: size }}
+              style={{ width: size, zIndex: scale > 1.02 ? Math.round(scale * 100) : isHot ? 20 : undefined }}
             >
               {item.action ? (
                 <button

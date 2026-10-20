@@ -79,8 +79,10 @@ body {
   background-color: hsl(var(--foreground) / 0.08);
 }
 
+/* Hovered tile is opaque so magnified icons never show through each other */
 .dock-tile-auto.dock-tile-hot {
-  background-color: hsl(var(--foreground) / 0.16);
+  background-color: hsl(var(--background));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 
 /* Keep page content clear of the dock */
