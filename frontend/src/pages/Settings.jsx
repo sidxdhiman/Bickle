@@ -1,14 +1,67 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Settings as SettingsIcon, Palette, Type, AlertTriangle, Trash2, Moon, Sun, Download, X } from 'lucide-react';
+import {
+  Settings as SettingsIcon,
+  Palette,
+  Type,
+  AlertTriangle,
+  Trash2,
+  Moon,
+  Sun,
+  Download,
+  X,
+  Dock as DockIcon,
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
+  RotateCcw,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SettingsSkeleton } from '../components/Skeletons';
 import { applyTheme } from '../utils/themeUtils';
+import { useDockSettings } from '../hooks/useDockSettings';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
+
+const Toggle = ({ checked, onChange, label }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    aria-label={label}
+    onClick={onChange}
+    className={cn(
+      'relative h-5 w-10 shrink-0 transition-colors',
+      checked ? 'bg-primary' : 'bg-border'
+    )}
+  >
+    <span
+      className={cn(
+        'absolute top-0.5 h-4 w-4 bg-background transition-all duration-200',
+        checked ? 'left-[22px]' : 'left-0.5'
+      )}
+    />
+  </button>
+);
+
+const positionOptions = [
+  { id: 'bottom', label: 'Bottom', Icon: PanelBottom },
+  { id: 'left', label: 'Left', Icon: PanelLeft },
+  { id: 'right', label: 'Right', Icon: PanelRight },
+];
+
+const dockColorSwatches = [
+  { value: 'auto', label: 'Theme' },
+  { value: '#18181b', label: 'Zinc' },
+  { value: '#3f3f46', label: 'Stone' },
+  { value: '#8b5cf6', label: 'Violet' },
+  { value: '#2563eb', label: 'Blue' },
+  { value: '#b91c1c', label: 'Red' },
+  { value: '#15803d', label: 'Green' },
+];
 
 const fontOptions = [
   { id: 'inter', label: 'Inter', fontFamily: '"Inter", sans-serif' },
@@ -145,6 +198,7 @@ const Settings = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [dock, updateDock, resetDock] = useDockSettings();
 
   useEffect(() => {
     // Load settings from localStorage
@@ -404,18 +458,186 @@ const Settings = () => {
         </div>
       </div>
 
+      {/* Dock Settings */}
+      <div className="bg-card border border-border rounded-lg p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <DockIcon className="w-6 h-6 text-primary" />
+            <h2 className="text-xl font-semibold">Dock</h2>
+          </div>
+          <button
+            type="button"
+            onClick={resetDock}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          {/* Position */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-2 block">Position</label>
+            <div className="flex gap-2">
+              {positionOptions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => updateDock({ position: option.id })}
+                  className={cn(
+                    'flex items-center gap-2 px-4 py-2 border transition-all',
+                    dock.position === option.id
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-secondary text-secondary-foreground border-border hover:bg-accent'
+                  )}
+                >
+                  <option.Icon className="w-4 h-4" />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Side docks move to the bottom on small screens.
+            </p>
+          </div>
+
+          {/* Icon Size */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-muted-foreground">Icon size</label>
+              <span className="text-xs text-muted-foreground">{dock.size}px</span>
+            </div>
+            <input
+              type="range"
+              min={28}
+              max={64}
+              step={2}
+              value={dock.size}
+              onChange={(e) => updateDock({ size: Number(e.target.value) })}
+              className="w-full accent-primary"
+            />
+          </div>
+
+          {/* Magnification */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                Magnify icons on hover
+              </label>
+              <Toggle
+                checked={dock.magnificationEnabled}
+                onChange={() => updateDock({ magnificationEnabled: !dock.magnificationEnabled })}
+                label="Magnify icons on hover"
+              />
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min={100}
+                max={220}
+                step={5}
+                value={dock.magnification}
+                disabled={!dock.magnificationEnabled}
+                onChange={(e) => updateDock({ magnification: Number(e.target.value) })}
+                className="w-full accent-primary disabled:opacity-40"
+              />
+              <span className="w-10 text-right text-xs text-muted-foreground">
+                {dock.magnification}%
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              How much icons grow when the pointer hovers over them.
+            </p>
+          </div>
+
+          {/* Background Color */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-2 block">
+              Background
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {dockColorSwatches.map((swatch) => (
+                <button
+                  key={swatch.value}
+                  type="button"
+                  title={swatch.label}
+                  aria-label={`Dock color: ${swatch.label}`}
+                  onClick={() => updateDock({ color: swatch.value })}
+                  className={cn(
+                    'flex h-8 w-8 items-center justify-center border-2 transition-all',
+                    dock.color === swatch.value ? 'border-primary' : 'border-border'
+                  )}
+                  style={swatch.value === 'auto' ? undefined : { backgroundColor: swatch.value }}
+                >
+                  {swatch.value === 'auto' && <Palette className="w-4 h-4" />}
+                </button>
+              ))}
+              <label
+                className="flex h-8 w-8 cursor-pointer items-center justify-center border border-border"
+                title="Custom color"
+              >
+                <input
+                  type="color"
+                  value={dock.color === 'auto' ? '#18181b' : dock.color}
+                  onChange={(e) => updateDock({ color: e.target.value })}
+                  className="h-5 w-5 cursor-pointer border-0 bg-transparent p-0"
+                  aria-label="Custom dock color"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Opacity */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-medium text-muted-foreground">
+                Background opacity
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {Math.round(dock.opacity * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={30}
+              max={100}
+              step={5}
+              value={Math.round(dock.opacity * 100)}
+              onChange={(e) => updateDock({ opacity: Number(e.target.value) / 100 })}
+              className="w-full accent-primary"
+            />
+          </div>
+
+          {/* Labels */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Show labels</label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Display the app name above an icon on hover.
+              </p>
+            </div>
+            <Toggle
+              checked={dock.showLabels}
+              onChange={() => updateDock({ showLabels: !dock.showLabels })}
+              label="Show labels on hover"
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Danger Zone */}
-      <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+      <div className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900 rounded-lg p-6">
         <div className="flex items-center gap-3 mb-6">
           <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
-          <h2 className="text-xl font-semibold text-red-700 dark:text-red-300">Danger Zone</h2>
+          <h2 className="text-xl font-semibold text-red-800 dark:text-red-300">Danger Zone</h2>
         </div>
 
         <div className="space-y-4">
           {/* Export Data & Delete Everything Section */}
-          <div className="p-4 bg-blue-100 dark:bg-blue-900/20 border border-blue-300 dark:border-blue-700 rounded-lg">
-            <h3 className="font-medium text-blue-800 dark:text-blue-200 mb-2">Export & Delete Everything</h3>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mb-4">
+          <div className="p-4 bg-blue-50 dark:bg-blue-950/40 border border-blue-300 dark:border-blue-900 rounded-lg">
+            <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-2">Export & Delete Everything</h3>
+            <p className="text-sm text-blue-800 dark:text-blue-300 mb-4">
               Export your data in multiple formats and then permanently delete all your data.
             </p>
             <button
@@ -428,9 +650,9 @@ const Settings = () => {
           </div>
 
           {/* Delete Without Export Section */}
-          <div className="p-4 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 rounded-lg">
-            <h3 className="font-medium text-red-800 dark:text-red-200 mb-2">Delete Without Export</h3>
-            <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+          <div className="p-4 bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-900 rounded-lg">
+            <h3 className="font-medium text-red-900 dark:text-red-200 mb-2">Delete Without Export</h3>
+            <p className="text-sm text-red-800 dark:text-red-300 mb-4">
               Permanently delete all your tasks, notes, calendar events, sleep records, and task lists without exporting.
               This cannot be undone.
             </p>

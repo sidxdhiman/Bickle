@@ -28,3 +28,66 @@ body {
   font-family: system-ui, -apple-system, sans-serif;
 }
 
+/* Dock */
+.dock {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  border-width: 1px;
+  border-style: solid;
+  border-color: hsl(var(--border));
+  border-radius: 20px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+}
+
+.dock-pos-bottom,
+.dock-pos-left,
+.dock-pos-right {
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  flex-direction: row;
+}
+
+@media (min-width: 768px) {
+  .dock-pos-left {
+    left: 14px;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
+  .dock-pos-right {
+    right: 14px;
+    left: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+  }
+}
+
+/* Keep page content clear of the dock */
+.dock-space {
+  padding-bottom: calc(var(--dock-footprint, 96px) + 20px);
+}
+
+@media (min-width: 768px) {
+  .dock-space-left {
+    padding-left: calc(var(--dock-footprint, 96px));
+    padding-bottom: 1.5rem;
+  }
+  .dock-space-right {
+    padding-right: calc(var(--dock-footprint, 96px));
+    padding-bottom: 1.5rem;
+  }
+}
+
+
