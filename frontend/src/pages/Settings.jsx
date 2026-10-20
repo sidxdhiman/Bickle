@@ -21,6 +21,7 @@ import { twMerge } from 'tailwind-merge';
 import { SettingsSkeleton } from '../components/Skeletons';
 import { applyTheme } from '../utils/themeUtils';
 import { useDockSettings } from '../hooks/useDockSettings';
+import { useNavMode } from '../hooks/useNavMode';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -199,6 +200,7 @@ const Settings = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [dock, updateDock, resetDock] = useDockSettings();
+  const [navMode, setNavMode] = useNavMode();
 
   useEffect(() => {
     // Load settings from localStorage
@@ -423,6 +425,39 @@ const Settings = () => {
               </button>
             </div>
           </div>
+
+          <div className="pt-4 border-t border-border">
+            <label className="text-sm font-medium text-muted-foreground mb-2 block">Navigation style</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setNavMode('dock')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 border transition-all",
+                  navMode === 'dock'
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
+                )}
+              >
+                <DockIcon className="w-4 h-4" />
+                Dock
+              </button>
+              <button
+                onClick={() => setNavMode('sidebar')}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 border transition-all",
+                  navMode === 'sidebar'
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-secondary text-secondary-foreground border-border hover:bg-accent"
+                )}
+              >
+                <PanelLeft className="w-4 h-4" />
+                Sidebar
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Dock is a floating macOS-style bar; Sidebar is the classic list. Applies instantly.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -502,21 +537,59 @@ const Settings = () => {
             </p>
           </div>
 
-          {/* Icon Size */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-medium text-muted-foreground">Icon size</label>
-              <span className="text-xs text-muted-foreground">{dock.size}px</span>
+          {/* Size & Spacing */}
+          <div className="space-y-5">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-muted-foreground">Icon size</label>
+                <span className="text-xs text-muted-foreground">{dock.size}px</span>
+              </div>
+              <input
+                type="range"
+                min={28}
+                max={64}
+                step={2}
+                value={dock.size}
+                onChange={(e) => updateDock({ size: Number(e.target.value) })}
+                className="w-full accent-primary"
+              />
             </div>
-            <input
-              type="range"
-              min={28}
-              max={64}
-              step={2}
-              value={dock.size}
-              onChange={(e) => updateDock({ size: Number(e.target.value) })}
-              className="w-full accent-primary"
-            />
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-muted-foreground">Dock size (padding)</label>
+                <span className="text-xs text-muted-foreground">{dock.padding}px</span>
+              </div>
+              <input
+                type="range"
+                min={4}
+                max={20}
+                step={1}
+                value={dock.padding}
+                onChange={(e) => updateDock({ padding: Number(e.target.value) })}
+                className="w-full accent-primary"
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                How bulky the dock bar is around the icons.
+              </p>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-medium text-muted-foreground">Icon spacing</label>
+                <span className="text-xs text-muted-foreground">{dock.gap}px</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={16}
+                step={1}
+                value={dock.gap}
+                onChange={(e) => updateDock({ gap: Number(e.target.value) })}
+                className="w-full accent-primary"
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Gap between neighbouring icons.
+              </p>
+            </div>
           </div>
 
           {/* Magnification */}
@@ -609,19 +682,48 @@ const Settings = () => {
             />
           </div>
 
-          {/* Labels */}
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <label className="text-sm font-medium text-muted-foreground">Show labels</label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Display the app name above an icon on hover.
-              </p>
+          {/* Appearance toggles */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Show labels</label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Display the app name above an icon on hover.
+                </p>
+              </div>
+              <Toggle
+                checked={dock.showLabels}
+                onChange={() => updateDock({ showLabels: !dock.showLabels })}
+                label="Show labels on hover"
+              />
             </div>
-            <Toggle
-              checked={dock.showLabels}
-              onChange={() => updateDock({ showLabels: !dock.showLabels })}
-              label="Show labels on hover"
-            />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Icon background</label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  A subtle tile behind each icon that grows with it, so icons stay visible even
+                  when the dock color matches them.
+                </p>
+              </div>
+              <Toggle
+                checked={dock.showTiles}
+                onChange={() => updateDock({ showTiles: !dock.showTiles })}
+                label="Icon background tiles"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground">Active indicator</label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Small dot under the icon of the app that is currently open.
+                </p>
+              </div>
+              <Toggle
+                checked={dock.showIndicators}
+                onChange={() => updateDock({ showIndicators: !dock.showIndicators })}
+                label="Active app indicator"
+              />
+            </div>
           </div>
         </div>
       </div>

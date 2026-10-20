@@ -74,6 +74,15 @@ body {
   }
 }
 
+/* Icon tiles (auto/theme dock color) — scale with the icon transform */
+.dock-tile-auto {
+  background-color: hsl(var(--foreground) / 0.08);
+}
+
+.dock-tile-auto.dock-tile-hot {
+  background-color: hsl(var(--foreground) / 0.16);
+}
+
 /* Keep page content clear of the dock */
 .dock-space {
   padding-bottom: calc(var(--dock-footprint, 96px) + 20px);

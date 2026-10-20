@@ -6,11 +6,15 @@ const CHANGE_EVENT = 'bickle-dock-settings-change';
 export const DEFAULT_DOCK_SETTINGS = {
   position: 'bottom',
   size: 44,
+  padding: 10,
+  gap: 6,
   magnification: 160,
   magnificationEnabled: true,
   color: 'auto',
   opacity: 0.85,
   showLabels: true,
+  showTiles: true,
+  showIndicators: true,
 };
 
 export const loadDockSettings = () => {

@@ -34,7 +34,19 @@ const Dock = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { position, size, magnification, magnificationEnabled, color, opacity, showLabels } = settings;
+  const {
+    position,
+    size,
+    padding,
+    gap,
+    magnification,
+    magnificationEnabled,
+    color,
+    opacity,
+    showLabels,
+    showTiles,
+    showIndicators,
+  } = settings;
 
   const [isDesktop, setIsDesktop] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
@@ -51,10 +63,12 @@ const Dock = () => {
 
   const navItems = PAGES.filter((page) => allowedPages.includes(page.key));
 
-  const items = [
-    { id: 'home', label: 'Bickle', to: '/', image: '/bickle_icon.png' },
-    ...navItems.map((page) => ({ id: page.key, label: page.label, to: page.path, Icon: page.icon })),
-  ];
+  const items = navItems.map((page) => ({
+    id: page.key,
+    label: page.label,
+    to: page.path,
+    Icon: page.icon,
+  }));
   const groupStart = items.length;
   if (!isGuest) {
     items.push({ id: 'settings', label: 'Settings', to: '/settings', Icon: SettingsIcon });
@@ -77,7 +91,7 @@ const Dock = () => {
       next.push(el ? (vertical ? el.offsetTop + el.offsetHeight / 2 : el.offsetLeft + el.offsetWidth / 2) : 0);
     }
     setCenters(next);
-  }, [size, vertical, items.length]);
+  }, [size, padding, gap, vertical, items.length]);
 
   const handleMouseMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -134,7 +148,7 @@ const Dock = () => {
     position === 'left' ? 'dock-pos-left' : position === 'right' ? 'dock-pos-right' : 'dock-pos-bottom';
 
   const iconPx = Math.max(14, Math.round(size * 0.52));
-  const logoPx = Math.max(18, Math.round(size * 0.72));
+  const tileRadius = Math.max(8, Math.round(size * 0.3));
 
   return (
     <div
@@ -143,6 +157,8 @@ const Dock = () => {
         backgroundColor: bg,
         borderColor: color !== 'auto' ? 'rgba(255, 255, 255, 0.14)' : undefined,
         color: contentColor,
+        padding: `${padding}px`,
+        gap: `${gap}px`,
       }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -156,6 +172,7 @@ const Dock = () => {
       {items.map((item, index) => {
         const scale = scales ? scales[index] : 1;
         const active = item.to ? isActive(item.to) : false;
+        const isHot = hovered === index;
         const transformOrigin = vertical
           ? position === 'left'
             ? 'center left'
@@ -168,28 +185,34 @@ const Dock = () => {
             : { right: `calc(100% + ${8 + extra}px)`, top: '50%', transform: 'translateY(-50%)' }
           : { bottom: `calc(100% + ${8 + extra}px)`, left: '50%', transform: 'translateX(-50%)' };
 
+        const tileAlpha = isHot ? 0.22 : 0.12;
+        const customTileBg =
+          showTiles && color !== 'auto'
+            ? hexLuminance(color) > 0.5
+              ? `rgba(0, 0, 0, ${tileAlpha})`
+              : `rgba(255, 255, 255, ${tileAlpha})`
+            : undefined;
+
         const inner = (
           <span
-            className="flex select-none items-center justify-center"
+            className={
+              showTiles && color === 'auto'
+                ? `dock-tile-auto${isHot ? ' dock-tile-hot' : ''}`
+                : undefined
+            }
             style={{
               width: size,
               height: size,
+              borderRadius: tileRadius,
+              backgroundColor: customTileBg,
               transform: `scale(${scale.toFixed(3)})`,
               transformOrigin,
-              transition: 'transform 120ms ease-out',
+              transition: 'transform 120ms ease-out, background-color 150ms ease',
             }}
           >
-            {item.image ? (
-              <img
-                src={item.image}
-                alt=""
-                draggable={false}
-                className="object-contain"
-                style={{ width: logoPx, height: logoPx }}
-              />
-            ) : (
+            <span className="flex h-full w-full items-center justify-center select-none">
               <item.Icon style={{ width: iconPx, height: iconPx }} strokeWidth={1.8} />
-            )}
+            </span>
           </span>
         );
 
@@ -228,11 +251,13 @@ const Dock = () => {
                   {inner}
                 </NavLink>
               )}
-              <span
-                className="mt-1 block h-1 w-1 rounded-[999px]"
-                style={active ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
-              />
-              {showLabels && hovered === index && (
+              {showIndicators && (
+                <span
+                  className="mt-1 block h-1 w-1 rounded-[999px]"
+                  style={active ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
+                />
+              )}
+              {showLabels && isHot && (
                 <span
                   className="pointer-events-none absolute z-50 whitespace-nowrap border border-border bg-foreground px-2 py-1 text-xs font-medium text-background shadow-lg"
                   style={{ ...tooltipStyle, borderRadius: 8 }}
