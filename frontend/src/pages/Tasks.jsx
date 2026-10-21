@@ -79,7 +79,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, onCreateList, task = null
   };
 
   const handleCreateListFromTask = async (listData) => {
-    const newList = await onCreateList(listData);
+    const newList = await onCreateList(listData, { select: false });
     if (newList) {
       setFormData(prev => ({
         ...prev,
@@ -115,7 +115,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, onCreateList, task = null
         tags: []
       });
     }
-  }, [isOpen, task, defaultListId]);
+  }, [isOpen, task]);
 
 
   if (!isOpen) return null;
@@ -957,14 +957,14 @@ const TaskPage = () => {
     setIsListManagementOpen(true);
   };
 
-  const handleCreateListSubmit = async (listData) => {
+  const handleCreateListSubmit = async (listData, { select = true } = {}) => {
     const res = await axios.post('/lists', {
       ...listData,
       isFavorite: false,
       statuses: defaultStatusOptions,
     });
     setLists(prev => [...prev, res.data]);
-    setSelectedList(res.data._id);
+    if (select) setSelectedList(res.data._id);
     return res.data;
   };
 
@@ -1026,7 +1026,7 @@ const TaskPage = () => {
     <div className="flex flex-col lg:flex-row h-full max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 gap-6">
       {/* Mobile Sidebar Toggle */}
       <button
-        className="lg:hidden fixed bottom-4 right-4 z-40 p-3 rounded-full bg-primary text-primary-foreground shadow-lg"
+        className="lg:hidden fixed bottom-28 right-4 z-50 p-3 rounded-full bg-primary text-primary-foreground shadow-lg"
         onClick={() => setIsSidebarOpen(true)}
       >
         <Grip className="w-6 h-6" />
