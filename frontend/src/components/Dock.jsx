@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, LogOut } from 'lucide-react';
 import { PAGES } from '../config/pages';
 import { useAccess } from '../context/AccessContext';
 import { useDockSettings } from '../hooks/useDockSettings';
+import { useBackground } from '../hooks/useBackground';
 
 const SIGMA = 0.85;
 
@@ -31,6 +32,7 @@ const hexLuminance = (hex) => {
 const Dock = () => {
   const { isGuest, allowedPages, endGuest } = useAccess();
   const [settings] = useDockSettings();
+  const [background] = useBackground();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -141,6 +143,10 @@ const Dock = () => {
     else handleLogout();
   };
 
+  const accentWash =
+    color === 'auto' && background.accentAuto && background.type !== 'none'
+      ? `linear-gradient(hsl(var(--primary) / 0.14), hsl(var(--primary) / 0.14))`
+      : undefined;
   const bg = color === 'auto' ? `hsl(var(--secondary) / ${opacity})` : hexToRgba(color, opacity);
   const contentColor = color === 'auto' ? undefined : hexLuminance(color) > 0.5 ? '#18181b' : '#f4f4f5';
 
@@ -155,6 +161,7 @@ const Dock = () => {
       className={`dock ${dockPosClass}`}
       style={{
         backgroundColor: bg,
+        backgroundImage: accentWash,
         borderColor: color !== 'auto' ? 'rgba(255, 255, 255, 0.14)' : undefined,
         color: contentColor,
         padding: `${padding}px`,

@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import Dock from '../components/Dock';
 import Sidebar from '../components/Sidebar';
 import TopNav from '../components/TopNav';
+import BackgroundLayer from '../components/BackgroundLayer';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useNavMode } from '../hooks/useNavMode';
 
@@ -23,6 +24,7 @@ const MainLayout = () => {
 
   return (
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
+      <BackgroundLayer />
       {!dockMode && (
         <>
           <div
@@ -33,7 +35,7 @@ const MainLayout = () => {
         </>
       )}
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden relative z-10">
         <TopNav
           showMenu={!dockMode}
           onMenuClick={() => setIsSidebarOpen((open) => !open)}

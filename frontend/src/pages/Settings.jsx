@@ -15,6 +15,9 @@ import {
   PanelLeft,
   PanelRight,
   RotateCcw,
+  Image as ImageIcon,
+  Upload,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -22,6 +25,9 @@ import { SettingsSkeleton } from '../components/Skeletons';
 import { applyTheme } from '../utils/themeUtils';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useNavMode } from '../hooks/useNavMode';
+import { useBackground } from '../hooks/useBackground';
+import { BACKGROUND_PRESETS, presetToStyle } from '../utils/backgroundPresets';
+import { compressImageFile } from '../utils/colorUtils';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -62,6 +68,16 @@ const dockColorSwatches = [
   { value: '#2563eb', label: 'Blue' },
   { value: '#b91c1c', label: 'Red' },
   { value: '#15803d', label: 'Green' },
+];
+
+const accentSwatches = [
+  { value: null, label: 'Default' },
+  { value: '#8b5cf6', label: 'Violet' },
+  { value: '#3b82f6', label: 'Blue' },
+  { value: '#14b8a6', label: 'Teal' },
+  { value: '#10b981', label: 'Emerald' },
+  { value: '#f59e0b', label: 'Amber' },
+  { value: '#f43f5e', label: 'Rose' },
 ];
 
 const fontOptions = [
@@ -201,6 +217,8 @@ const Settings = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [dock, updateDock, resetDock] = useDockSettings();
   const [navMode, setNavMode] = useNavMode();
+  const [bg, updateBg] = useBackground();
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
 
   useEffect(() => {
     // Load settings from localStorage
@@ -234,6 +252,37 @@ const Settings = () => {
     setFont(newFont);
     localStorage.setItem('bickle-font', newFont);
     applyFont(newFont);
+  };
+
+  const handleBackgroundNone = () => {
+    updateBg({ type: 'none', presetId: null, accentHex: null });
+  };
+
+  const handleBackgroundPreset = (presetId) => {
+    updateBg({ type: 'preset', presetId, accentHex: null });
+  };
+
+  const handleBackgroundUpload = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setIsUploadingBg(true);
+    try {
+      const dataUrl = await compressImageFile(file);
+      updateBg({ type: 'custom', presetId: null, customImage: dataUrl, accentHex: null });
+    } catch (error) {
+      alert(error.message || 'Could not use that image. Please try a different one.');
+    } finally {
+      setIsUploadingBg(false);
+    }
+  };
+
+  const handleAccentAutoToggle = () => {
+    updateBg({ accentAuto: !bg.accentAuto, accentHex: null });
+  };
+
+  const handleManualAccent = (hex) => {
+    updateBg({ manualAccent: hex });
   };
 
   const handleDeleteAllData = async () => {
@@ -456,6 +505,197 @@ const Settings = () => {
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
               Dock is a floating macOS-style bar; Sidebar is the classic list. Applies instantly.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Background Settings */}
+      <div className="bg-card border border-border rounded-lg p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <ImageIcon className="w-6 h-6 text-primary" />
+            <h2 className="text-xl font-semibold">Background</h2>
+          </div>
+          <button
+            onClick={() =>
+              updateBg({
+                type: 'none',
+                presetId: null,
+                customImage: null,
+                accentHex: null,
+                accentAuto: true,
+                manualAccent: null,
+                scrimOpacity: 0.4,
+              })
+            }
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground border border-border hover:bg-accent transition-colors"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <label className="text-sm font-medium text-muted-foreground mb-2 block">Wallpaper</label>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <button
+                onClick={handleBackgroundNone}
+                aria-label="No background"
+                className={cn(
+                  'relative aspect-[16/10] border transition-all overflow-hidden',
+                  bg.type === 'none'
+                    ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background'
+                    : 'border-border hover:border-muted-foreground/50'
+                )}
+                style={{ backgroundColor: 'hsl(var(--background))' }}
+              >
+                <span className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+                  None
+                </span>
+                <X className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+
+              {BACKGROUND_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => handleBackgroundPreset(preset.id)}
+                  aria-label={preset.name}
+                  className={cn(
+                    'relative aspect-[16/10] border transition-all overflow-hidden',
+                    bg.type === 'preset' && bg.presetId === preset.id
+                      ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background'
+                      : 'border-border hover:border-muted-foreground/50'
+                  )}
+                  style={presetToStyle(preset)}
+                >
+                  <span className="absolute bottom-0 inset-x-0 px-2 py-1 text-[11px] font-medium text-left text-white bg-gradient-to-t from-black/70 to-transparent">
+                    {preset.name}
+                  </span>
+                </button>
+              ))}
+
+              <button
+                onClick={() => document.getElementById('bg-upload-input')?.click()}
+                aria-label="Upload your own background"
+                className={cn(
+                  'relative aspect-[16/10] border transition-all overflow-hidden',
+                  bg.type === 'custom'
+                    ? 'border-primary ring-2 ring-primary ring-offset-2 ring-offset-background'
+                    : 'border-border hover:border-muted-foreground/50'
+                )}
+                style={
+                  bg.customImage
+                    ? {
+                        backgroundImage: `url(${bg.customImage})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                      }
+                    : undefined
+                }
+              >
+                <span
+                  className={cn(
+                    'absolute inset-0 flex flex-col items-center justify-center gap-1 text-[11px] font-medium transition-colors',
+                    bg.customImage
+                      ? 'text-white bg-black/45'
+                      : 'text-muted-foreground bg-secondary/40'
+                  )}
+                >
+                  <Upload className="w-4 h-4" />
+                  {isUploadingBg ? 'Uploading…' : bg.customImage ? 'Replace' : 'Upload'}
+                </span>
+              </button>
+              <input
+                id="bg-upload-input"
+                type="file"
+                accept="image/*"
+                onChange={handleBackgroundUpload}
+                className="hidden"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Large images are resized automatically. Your own wallpaper stays on this device.
+            </p>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground block">Match accent to background</label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Detects the main color of your wallpaper and applies it to icons, buttons and the dock.
+                </p>
+              </div>
+              <Toggle
+                checked={bg.accentAuto}
+                onChange={handleAccentAutoToggle}
+                label="Match accent to background"
+              />
+            </div>
+
+            <div className="mt-3 flex items-center gap-3">
+              {bg.accentAuto ? (
+                <>
+                  <span
+                    className="w-6 h-6 border border-border shrink-0"
+                    style={{
+                      backgroundColor: bg.type === 'none' ? '#8b5cf6' : bg.accentHex || 'hsl(var(--primary))',
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {bg.type === 'none'
+                      ? 'Pick a wallpaper to auto-match its color.'
+                      : bg.accentHex
+                        ? `Detected accent ${bg.accentHex.toUpperCase()}`
+                        : 'Detecting dominant color…'}
+                  </span>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {accentSwatches.map((swatch) => (
+                    <button
+                      key={swatch.value || 'default'}
+                      onClick={() => handleManualAccent(swatch.value)}
+                      title={swatch.label}
+                      aria-label={`Accent ${swatch.label}`}
+                      className={cn(
+                        'w-6 h-6 border transition-all',
+                        (bg.manualAccent || null) === swatch.value
+                          ? 'border-primary ring-2 ring-primary ring-offset-1 ring-offset-background'
+                          : 'border-border hover:border-muted-foreground/50'
+                      )}
+                      style={{
+                        backgroundColor: swatch.value || '#8b5cf6',
+                        opacity: swatch.value ? 1 : 0.35,
+                        backgroundImage: swatch.value
+                          ? undefined
+                          : 'linear-gradient(135deg, #8b5cf6 50%, #3b82f6 50%)',
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-center gap-2 mb-2">
+              <SlidersHorizontal className="w-4 h-4 text-muted-foreground" />
+              <label className="text-sm font-medium text-muted-foreground">Dimness</label>
+              <span className="ml-auto text-xs text-muted-foreground">{Math.round(bg.scrimOpacity * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="70"
+              value={Math.round(bg.scrimOpacity * 100)}
+              onChange={(e) => updateBg({ scrimOpacity: Number(e.target.value) / 100 })}
+              className="w-full accent-primary"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Darkens (or lightens in light mode) the wallpaper so content stays readable.
             </p>
           </div>
         </div>
