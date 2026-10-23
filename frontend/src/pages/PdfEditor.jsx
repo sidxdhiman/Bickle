@@ -143,7 +143,7 @@ const SignatureModal = ({ isOpen, onClose, onApply }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-background border border-border rounded-lg shadow-2xl w-full max-w-xl">
+      <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-xl">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h2 className="text-lg font-bold">Draw your signature</h2>
           <button onClick={onClose} className="p-2 rounded-full text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">

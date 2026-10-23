@@ -42,14 +42,14 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
 
   return (
     <div className="sticky top-0 z-30 px-3 pt-3">
-      <header className="flex h-14 items-center justify-between gap-3 rounded-[18px] border border-border bg-secondary/70 px-3 shadow-lg shadow-black/5 backdrop-blur-xl">
+      <header className="flex h-14 items-center justify-between gap-3 rounded-2xl border border-border bg-secondary/70 px-3 shadow-lg shadow-black/5 backdrop-blur-xl">
         <div className="flex items-center gap-3 min-w-0">
           {showMenu && navMode === 'sidebar' && onMenuClick && (
             <button
               type="button"
               onClick={onMenuClick}
               aria-label="Open navigation"
-              className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors md:hidden"
+              className="p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors md:hidden"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -68,7 +68,7 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
             <input
               type="text"
               placeholder="Quick search..."
-              className="pl-9 pr-4 py-1.5 bg-background/60 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary w-44 lg:w-64 transition-all"
+              className="pl-9 pr-4 py-1.5 rounded-lg bg-background/60 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary w-44 lg:w-64 transition-all"
             />
           </div>
         </div>
@@ -79,13 +79,13 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
           </div>
           {isGuest ? (
             <>
-              <span className="hidden sm:flex items-center gap-2 text-xs font-medium px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+              <span className="hidden sm:flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                 <Clock className="w-3.5 h-3.5" />
                 Guest · {remaining} left
               </span>
               <button
                 onClick={endGuest}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 transition-colors"
               >
                 <LogOut className="w-4 h-4" />
                 End session
@@ -93,7 +93,7 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
             </>
           ) : (
             <>
-              <button className="p-2 hover:bg-accent transition-colors relative">
+              <button className="p-2 rounded-lg hover:bg-accent transition-colors relative">
                 <Bell className="w-5 h-5 text-muted-foreground" />
                 <span className="absolute top-2 right-2 w-2 h-2 bg-primary border-2 border-secondary"></span>
               </button>
@@ -102,7 +102,7 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
                   <p className="text-sm font-semibold leading-none">Sidharth</p>
                   <p className="text-xs text-muted-foreground">Pro Plan</p>
                 </div>
-                <button onClick={() => setShowProfile(true)} className="w-9 h-9 bg-accent flex items-center justify-center overflow-hidden border border-border cursor-pointer hover:ring-2 ring-primary transition-all">
+                <button onClick={() => setShowProfile(true)} className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center overflow-hidden border border-border cursor-pointer hover:ring-2 ring-primary transition-all">
                   {profilePic ? (
                     <img src={profilePic} alt="profile" className="w-full h-full object-cover" />
                   ) : (

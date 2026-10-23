@@ -101,7 +101,7 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isDang
   
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-background border border-border rounded-lg p-6 shadow-2xl max-w-sm w-full mx-4">
+      <div className="bg-background border border-border rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4">
         <h2 className="text-xl font-semibold text-foreground mb-2">{title}</h2>
         <p className="text-sm text-muted-foreground mb-6">{message}</p>
         <div className="flex gap-3 justify-end">
@@ -145,7 +145,7 @@ const ExportModal = ({ isOpen, onClose, onExport, isExporting }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-background border border-border rounded-lg p-6 shadow-2xl max-w-md w-full mx-4">
+      <div className="bg-background border border-border rounded-2xl p-6 shadow-2xl max-w-md w-full mx-4">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-foreground">Export & Delete Data</h2>
           <button
@@ -168,7 +168,7 @@ const ExportModal = ({ isOpen, onClose, onExport, isExporting }) => {
                 type="checkbox"
                 checked={selectedFormats.includes(format.id)}
                 onChange={() => toggleFormat(format.id)}
-                className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+                className="w-4 h-4 rounded-sm border-border text-primary focus:ring-primary"
               />
               <span className="text-sm font-medium text-foreground">{format.label}</span>
             </label>
@@ -180,7 +180,7 @@ const ExportModal = ({ isOpen, onClose, onExport, isExporting }) => {
               type="checkbox"
               checked={shouldDelete}
               onChange={(e) => setShouldDelete(e.target.checked)}
-              className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
+              className="w-4 h-4 rounded-sm border-border text-primary focus:ring-primary"
             />
             <span className="text-sm font-medium text-red-800 dark:text-red-200">
               Delete all data after export
@@ -438,7 +438,7 @@ const Settings = () => {
       </div>
 
       {/* Theme Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <Palette className="w-6 h-6 text-primary" />
           <h2 className="text-xl font-semibold">Appearance</h2>
@@ -511,7 +511,7 @@ const Settings = () => {
       </div>
 
       {/* Background Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <ImageIcon className="w-6 h-6 text-primary" />
@@ -702,7 +702,7 @@ const Settings = () => {
       </div>
 
       {/* Font Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <Type className="w-6 h-6 text-primary" />
           <h2 className="text-xl font-semibold">Typography</h2>
@@ -734,7 +734,7 @@ const Settings = () => {
       </div>
 
       {/* Dock Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <DockIcon className="w-6 h-6 text-primary" />
@@ -969,7 +969,7 @@ const Settings = () => {
       </div>
 
       {/* Danger Zone */}
-      <div className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900 rounded-lg p-6">
+      <div className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900 rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
           <h2 className="text-xl font-semibold text-red-800 dark:text-red-300">Danger Zone</h2>

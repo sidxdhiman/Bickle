@@ -519,7 +519,7 @@ const CalendarEntryModal = ({
                     type="checkbox"
                     checked={eventForm.allDay}
                     onChange={(e) => setEventForm({ ...eventForm, allDay: e.target.checked })}
-                    className="h-4 w-4 rounded border border-border text-primary focus:ring-primary"
+                    className="h-4 w-4 rounded-sm border border-border text-primary focus:ring-primary"
                   />
                 </div>
               </div>
@@ -635,7 +635,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-3xl overflow-y-auto rounded-3xl border border-border bg-background shadow-2xl">
+      <div className="w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl">
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between border-b border-border">
           <div>
             <h2 className="text-xl font-semibold">{formatFullDate(date)}</h2>
@@ -669,7 +669,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
         </div>
 
         <div className="space-y-6 p-5">
-          <div className="rounded-3xl border border-border bg-secondary/50 p-4">
+          <div className="rounded-2xl border border-border bg-secondary/50 p-4">
             <div className="flex items-center justify-between gap-4 mb-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">Events</p>
@@ -707,11 +707,11 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
                 ))}
               </div>
             ) : (
-              <div className="rounded-3xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">No events for this day.</div>
+              <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">No events for this day.</div>
             )}
           </div>
 
-          <div className="rounded-3xl border border-border bg-secondary/50 p-4">
+          <div className="rounded-2xl border border-border bg-secondary/50 p-4">
             <div className="flex items-center justify-between gap-4 mb-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">Tasks</p>
@@ -735,7 +735,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
                 ))}
               </div>
             ) : (
-              <div className="rounded-3xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">No tasks due on this day.</div>
+              <div className="rounded-2xl border border-dashed border-border bg-background p-4 text-sm text-muted-foreground">No tasks due on this day.</div>
             )}
           </div>
         </div>
@@ -1023,7 +1023,7 @@ const CalendarPage = () => {
         </div>
       </header>
 
-      <div className="flex-1 overflow-hidden bg-secondary/50 border border-border rounded-3xl">
+      <div className="flex-1 overflow-hidden bg-secondary/50 border border-border rounded-2xl">
         {loading ? (
           <CalendarSkeleton />
         ) : view === 'month' ? (
@@ -1076,7 +1076,7 @@ const CalendarPage = () => {
                           type="button"
                           key={item._id || item.id || `${item.title}-${date.toISOString()}`}
                           onClick={() => handleItemClick(item)}
-                          className="overflow-hidden rounded-xl px-2 py-1 text-[11px] font-semibold text-white text-left w-full"
+                          className="overflow-hidden rounded-lg px-2 py-1 text-[11px] font-semibold text-white text-left w-full"
                           style={{ backgroundColor: item.color }}
                         >
                           {item.title}
@@ -1103,7 +1103,7 @@ const CalendarPage = () => {
                     key={date.toISOString()}
                     type="button"
                     onClick={() => openDayDetails(date)}
-                    className="rounded-3xl border border-border bg-background p-4 text-left hover:bg-accent/40 transition-colors"
+                    className="rounded-2xl border border-border bg-background p-4 text-left hover:bg-accent/40 transition-colors"
                   >
                     <div className="flex items-center justify-between mb-4">
                       <div>
@@ -1133,7 +1133,7 @@ const CalendarPage = () => {
                           <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                         </button>
                       )) : (
-                        <div className="rounded-3xl border border-dashed border-border bg-secondary/40 p-4 text-sm text-muted-foreground">No items</div>
+                        <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-4 text-sm text-muted-foreground">No items</div>
                       )}
                     </div>
                   </button>
@@ -1143,7 +1143,7 @@ const CalendarPage = () => {
           </div>
         ) : (
           <div className="h-full overflow-auto p-4">
-            <div className="rounded-3xl border border-border bg-background p-6">
+            <div className="rounded-2xl border border-border bg-background p-6">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
                 <div>
                   <p className="text-sm text-muted-foreground">{formatFullDate(currentDate)}</p>
@@ -1155,7 +1155,7 @@ const CalendarPage = () => {
               </div>
               <div className="space-y-4">
                 {getItemsForDate(currentDate).map((item) => (
-                  <button key={item._id || item.id || `${item.title}-${currentDate.toISOString()}` } type="button" onClick={() => handleItemClick(item)} className="rounded-3xl border border-border bg-secondary/70 p-5 text-left w-full">
+                  <button key={item._id || item.id || `${item.title}-${currentDate.toISOString()}` } type="button" onClick={() => handleItemClick(item)} className="rounded-2xl border border-border bg-secondary/70 p-5 text-left w-full">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-sm font-semibold text-foreground">{item.title}</p>
@@ -1178,7 +1178,7 @@ const CalendarPage = () => {
                   </button>
                 ))}
                 {getItemsForDate(currentDate).length === 0 && (
-                  <div className="rounded-3xl border border-dashed border-border bg-secondary/40 p-6 text-sm text-muted-foreground">No entries for this day. Click on a date to add one.</div>
+                  <div className="rounded-2xl border border-dashed border-border bg-secondary/40 p-6 text-sm text-muted-foreground">No entries for this day. Click on a date to add one.</div>
                 )}
               </div>
             </div>

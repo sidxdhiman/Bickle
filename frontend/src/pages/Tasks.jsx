@@ -139,7 +139,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, onCreateList, task = null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6">
-      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
+      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <h2 className="text-lg sm:text-xl font-bold">{task ? 'Edit Task' : 'Create New Task'}</h2>
@@ -318,7 +318,7 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6">
-      <div className="bg-background border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
+      <div className="bg-background border border-border w-full max-w-lg max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-xl">
         {/* Header with close button */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <h2 className="text-lg sm:text-xl font-bold">{task.title}</h2>
@@ -461,7 +461,7 @@ const CreateListModal = ({ isOpen, onClose, onCreate }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
+      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-xl">
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <h2 className="text-lg sm:text-xl font-bold">Create New List</h2>
           <button
@@ -622,7 +622,7 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate, onDelete }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
+      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <h2 className="text-lg sm:text-xl font-bold">Manage List</h2>
@@ -1107,7 +1107,7 @@ const TaskPage = () => {
       </div>
 
       {/* Main Task Content */}
-      <div className="flex-1 bg-background border border-border rounded-lg p-4 sm:p-6 space-y-6 overflow-hidden">
+      <div className="flex-1 bg-background border border-border rounded-2xl p-4 sm:p-6 space-y-6 overflow-hidden">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-border">
           <div className="flex flex-col">
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">

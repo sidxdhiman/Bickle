@@ -387,7 +387,7 @@ const Sleep = () => {
 
       <div className="grid gap-4">
         {sleeps.map((sleep) => (
-          <div key={sleep._id} className="bg-card border border-border p-4 rounded-lg">
+          <div key={sleep._id} className="bg-card border border-border p-4 rounded-2xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-2 gap-2">
               <div className="flex items-center gap-2">
                 <Moon className="w-5 h-5 text-primary" />

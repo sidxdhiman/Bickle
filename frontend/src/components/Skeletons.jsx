@@ -227,13 +227,13 @@ export const SleepSkeleton = () => {
       </div>
 
       {/* Chart Area */}
-      <div className="bg-background border border-border rounded-lg p-6">
+      <div className="bg-background border border-border rounded-2xl p-6">
         <Skeleton className="h-6 w-32 mb-4" />
         <Skeleton className="h-64 w-full rounded" />
       </div>
 
       {/* Sleep Records */}
-      <div className="bg-background border border-border rounded-lg p-6">
+      <div className="bg-background border border-border rounded-2xl p-6">
         <Skeleton className="h-6 w-32 mb-4" />
         <div className="space-y-3">
           {[...Array(4)].map((_, i) => (
@@ -336,7 +336,7 @@ export const SettingsSkeleton = () => {
       </div>
 
       {/* Theme Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <Skeleton className="w-6 h-6 rounded" />
           <Skeleton className="h-6 w-24" />
@@ -348,7 +348,7 @@ export const SettingsSkeleton = () => {
       </div>
 
       {/* Font Settings */}
-      <div className="bg-card border border-border rounded-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <Skeleton className="w-6 h-6 rounded" />
           <Skeleton className="h-6 w-32" />
@@ -361,7 +361,7 @@ export const SettingsSkeleton = () => {
       </div>
 
       {/* Danger Zone */}
-      <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+      <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <Skeleton className="w-6 h-6 rounded" />
           <Skeleton className="h-6 w-24" />

@@ -154,7 +154,7 @@ const Dock = () => {
     position === 'left' ? 'dock-pos-left' : position === 'right' ? 'dock-pos-right' : 'dock-pos-bottom';
 
   const iconPx = Math.max(14, Math.round(size * 0.52));
-  const tileRadius = Math.max(8, Math.round(size * 0.3));
+  const tileRadius = size * 0.3 < 12 ? 8 : 16;
 
   return (
     <div
@@ -265,7 +265,7 @@ const Dock = () => {
               )}
               {showIndicators && (
                 <span
-                  className="mt-1 block h-1 w-1 rounded-[999px]"
+                  className="mt-1 block h-1 w-1 rounded-full"
                   style={active ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
                 />
               )}

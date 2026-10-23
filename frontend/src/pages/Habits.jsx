@@ -42,7 +42,7 @@ const HabitModal = ({ isOpen, onClose, onSubmit, habit = null }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-6">
-      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-lg shadow-xl">
+      <div className="bg-background border border-border w-full max-w-md max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-xl">
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-border">
           <h2 className="text-lg sm:text-xl font-bold">{habit ? 'Edit Habit' : 'Create New Habit'}</h2>
           <button

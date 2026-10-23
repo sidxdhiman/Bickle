@@ -47,7 +47,7 @@ const Login = ({ onAuthSuccess }) => {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 text-foreground">
-      <div className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-xl shadow-black/5">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/5">
         <h1 className="mb-4 text-3xl font-semibold">Secure Access</h1>
         <p className="mb-6 text-sm text-muted-foreground">
           This page is only for the authorized user. Enter your personal access code to continue.
@@ -59,7 +59,7 @@ const Login = ({ onAuthSuccess }) => {
             <input
               value={accessId}
               onChange={(event) => setAccessId(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-input bg-transparent px-4 py-3 text-sm outline-none transition focus:border-primary"
+              className="mt-2 w-full rounded-lg border border-input bg-transparent px-4 py-3 text-sm outline-none transition focus:border-primary"
               placeholder="Enter your ID"
               autoComplete="off"
             />
@@ -71,7 +71,7 @@ const Login = ({ onAuthSuccess }) => {
               type="password"
               value={accessPassword}
               onChange={(event) => setAccessPassword(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-input bg-transparent px-4 py-3 text-sm outline-none transition focus:border-primary"
+              className="mt-2 w-full rounded-lg border border-input bg-transparent px-4 py-3 text-sm outline-none transition focus:border-primary"
               placeholder="Enter your password"
               autoComplete="current-password"
             />
