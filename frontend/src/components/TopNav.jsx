@@ -41,7 +41,7 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
   })();
 
   return (
-    <div className="sticky top-0 z-30 bg-background/90 px-3 pt-3 backdrop-blur-sm">
+    <div className="sticky top-0 z-30 px-3 pt-3">
       <header className="flex h-14 items-center justify-between gap-3 rounded-[18px] border border-border bg-secondary/70 px-3 shadow-lg shadow-black/5 backdrop-blur-xl">
         <div className="flex items-center gap-3 min-w-0">
           {showMenu && navMode === 'sidebar' && onMenuClick && (
