@@ -84,6 +84,8 @@ const fontOptions = [
   { id: 'inter', label: 'Inter', fontFamily: '"Inter", sans-serif' },
   { id: 'system', label: 'System UI', fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, sans-serif' },
   { id: 'helvetica', label: 'Helvetica', fontFamily: '"Helvetica Neue", Helvetica, Arial, sans-serif' },
+  { id: 'manrope', label: 'Manrope', fontFamily: '"Manrope", sans-serif' },
+  { id: 'plus-jakarta-sans', label: 'Plus Jakarta Sans', fontFamily: '"Plus Jakarta Sans", sans-serif' },
 ];
 
 const exportFormats = [
