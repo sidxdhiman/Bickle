@@ -19,6 +19,7 @@ import Translator from './pages/Translator';
 import Habits from './pages/Habits';
 import Whiteboard from './pages/Whiteboard';
 import PdfEditor from './pages/PdfEditor';
+import SidArt from './pages/SidArt';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
 
@@ -163,6 +164,7 @@ const App = () => {
     return (
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
+          <Route path="/sid-art" element={<SidArt />} />
           <Route path="/*" element={<Login onAuthSuccess={() => setIsAuthenticated(true)} />} />
         </Routes>
       </BrowserRouter>
@@ -180,6 +182,7 @@ const App = () => {
     <AccessProvider value={accessValue}>
       <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
+          <Route path="/sid-art" element={<SidArt />} />
           <Route path="/" element={<MainLayout />}>
             <Route index element={<RequireAccess pageKey="dashboard"><Dashboard /></RequireAccess>} />
             <Route path="tasks" element={<RequireAccess pageKey="tasks"><Tasks /></RequireAccess>} />
