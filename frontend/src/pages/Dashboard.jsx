@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { CheckCircle, Clock, Calendar, FileText, TrendingUp, AlertCircle, Tally4, Check, Palette, Upload, ArrowUpRight } from 'lucide-react';
+import { CheckCircle, Clock, Calendar, FileText, TrendingUp, AlertCircle, Tally4, Check } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { DashboardSkeleton } from '../components/Skeletons';
@@ -318,34 +318,6 @@ const Dashboard = () => {
               <p className="text-sm sm:text-base">No upcoming events. Schedule your first event!</p>
             </div>
           )}
-        </div>
-      </div>
-
-      <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Palette className="w-5 h-5 mt-0.5 text-muted-foreground flex-shrink-0" />
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold">Art</h3>
-            <p className="text-sm text-muted-foreground">
-              Blogs, photographs, videos and music — a public space for my work.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
-            title="Upload coming soon"
-            className="px-4 py-2 rounded-lg bg-background border border-border text-sm font-medium hover:border-primary/50 transition-colors duration-200 flex items-center gap-2"
-          >
-            <Upload className="w-4 h-4" />
-            Upload
-          </button>
-          <button
-            onClick={() => navigate('/sid-art')}
-            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors duration-200 flex items-center gap-2"
-          >
-            Go to Art Site
-            <ArrowUpRight className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ import Translator from './pages/Translator';
 import Habits from './pages/Habits';
 import Whiteboard from './pages/Whiteboard';
 import PdfEditor from './pages/PdfEditor';
+import Art from './pages/Art';
 import SidArt from './pages/SidArt';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
@@ -196,6 +197,7 @@ const App = () => {
             <Route path="habits" element={<RequireAccess pageKey="habits"><Habits /></RequireAccess>} />
             <Route path="whiteboard" element={<RequireAccess pageKey="whiteboard"><Whiteboard /></RequireAccess>} />
             <Route path="pdf-editor" element={<RequireAccess pageKey="pdf-editor"><PdfEditor /></RequireAccess>} />
+            <Route path="art" element={<RequireAccess pageKey="art"><Art /></RequireAccess>} />
           </Route>
         </Routes>
       </BrowserRouter>

@@ -1,6 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
+const multer = require('multer');
 require('dotenv').config();
 
 if (!process.env.JWT_SECRET) {
@@ -13,6 +15,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
@@ -26,9 +29,21 @@ app.use('/api/money', require('./routes/moneyRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/habits', require('./routes/habitRoutes'));
 app.use('/api/whiteboards', require('./routes/whiteboardRoutes'));
+app.use('/api/art', require('./routes/artRoutes'));
 
 app.get('/', (req, res) => {
   res.send('Bickle API is running...');
+});
+
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: err.message });
+  }
+  if (err.status) {
+    return res.status(err.status).json({ message: err.message });
+  }
+  console.error(err);
+  res.status(500).json({ message: err.message || 'Something went wrong' });
 });
 
 const PORT = process.env.PORT || 5000;

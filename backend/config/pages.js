@@ -10,6 +10,7 @@ const GRANTABLE_PAGE_KEYS = [
   'sleep',
   'money',
   'translator',
+  'art',
 ];
 
 // Maps an API url prefix to the module key used for guest access checks.
@@ -22,6 +23,7 @@ const API_PAGE_MAP = [
   ['/api/money', 'money'],
   ['/api/habits', 'habits'],
   ['/api/whiteboards', 'whiteboard'],
+  ['/api/art', 'art'],
   ['/api/settings', 'settings'],
   // Guests must never manage/share access themselves.
   ['/api/guest', 'owner-management'],
