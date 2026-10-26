@@ -109,7 +109,7 @@ const SectionSkeleton = ({ label, index, total, kind }) => (
 
 const MetaRow = ({ icon: Icon, children }) =>
   children ? (
-    <div className="flex items-start gap-2 text-xs sm:text-sm text-black/65">
+    <div className="flex items-start gap-2 text-xs sm:text-sm text-[#F7F2E7]/70">
       <Icon className="w-3.5 h-3.5 mt-0.5 shrink-0 opacity-70" />
       <span>{children}</span>
     </div>
