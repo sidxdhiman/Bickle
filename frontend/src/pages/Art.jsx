@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
   Upload, ArrowUpRight, FileText, Image as ImageIcon, Clapperboard,
@@ -17,7 +16,6 @@ function cn(...inputs) {
 const EMPTY = { blogs: [], photos: [], videos: [], music: [] };
 
 const Art = () => {
-  const navigate = useNavigate();
   const [data, setData] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -147,7 +145,7 @@ const Art = () => {
             Upload
           </button>
           <button
-            onClick={() => navigate('/sid-art')}
+            onClick={() => window.open('/sid-art', '_blank', 'noopener,noreferrer')}
             className="px-4 py-2 rounded-lg bg-secondary border border-border text-sm font-medium hover:border-primary/50 transition-colors flex items-center gap-2"
           >
             Go to Art Site

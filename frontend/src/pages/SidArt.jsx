@@ -411,7 +411,7 @@ const SidArt = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden"
+        className="sid-art-scroll fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden"
         style={{ backgroundColor: CREAM, color: INK, fontFamily: "'Bodoni Moda', 'Times New Roman', serif" }}
       >
         {contactOpen && (
