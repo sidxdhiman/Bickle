@@ -15,7 +15,8 @@ import {
   ChevronDown,
   Edit2,
   X,
-  Check
+  Check,
+  Copy
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -79,6 +80,89 @@ const CategoryModal = ({ isOpen, onClose, onSave, initialName = '', isEdit = fal
   );
 };
 
+// Pinned notes always float to the top of the list (stable: keeps fetch order otherwise)
+const pinnedFirst = (a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0);
+
+// Run note operations without letting an already-deleted note (404) abort the batch
+const settleNoteOps = async (ops) => {
+  const results = await Promise.allSettled(ops);
+  const fatal = results.find(r => r.status === 'rejected' && r.reason?.response?.status !== 404);
+  if (fatal) throw fatal.reason;
+};
+
+// Generic confirmation modal (no browser prompts)
+const ConfirmModal = ({ isOpen, title, message, confirmLabel = 'Confirm', onConfirm, onClose, danger = false }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-background border border-border rounded-2xl p-6 shadow-2xl max-w-sm w-full mx-4">
+        <h2 className="text-xl font-semibold text-foreground mb-2">{title}</h2>
+        <p className="text-sm text-muted-foreground mb-5">{message}</p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className={cn(
+              "px-4 py-2 rounded-lg transition-colors",
+              danger
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                : "bg-primary text-primary-foreground hover:bg-primary/90"
+            )}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Modal shown when a note's category selector is changed: move / keep / copy
+const MoveNoteModal = ({ prompt, onMove, onCopy, onKeep }) => {
+  if (!prompt) return null;
+  const { note, from, to } = prompt;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-background border border-border rounded-2xl p-6 shadow-2xl max-w-md w-full mx-4">
+        <h2 className="text-xl font-semibold text-foreground mb-2">Change category</h2>
+        <p className="text-sm text-muted-foreground mb-1">
+          You are about to shift <span className="text-foreground font-medium">"{note.title}"</span> from{' '}
+          <span className="text-foreground font-medium">{from}</span> to{' '}
+          <span className="text-foreground font-medium">{to}</span>.
+        </p>
+        <p className="text-sm text-muted-foreground mb-5">Choose what you would like to do:</p>
+        <div className="flex flex-wrap gap-3 justify-end">
+          <button
+            onClick={onKeep}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors"
+          >
+            Keep in {from}
+          </button>
+          <button
+            onClick={onCopy}
+            className="px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 transition-colors flex items-center gap-2"
+          >
+            <Copy className="w-4 h-4" />
+            Copy to {to}
+          </button>
+          <button
+            onClick={onMove}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors flex items-center gap-2"
+          >
+            <Folder className="w-4 h-4" />
+            Move to {to}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const NotesPage = () => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -96,6 +180,8 @@ const NotesPage = () => {
   const [lastAction, setLastAction] = useState(null);
   const [showUndoToast, setShowUndoToast] = useState(false);
   const undoTimerRef = useRef(null);
+  const [noteToDelete, setNoteToDelete] = useState(null);
+  const [movePrompt, setMovePrompt] = useState(null); // { note, from, to }
 
   const getSelection = () => {
     const textarea = textAreaRef.current;
@@ -170,12 +256,26 @@ const NotesPage = () => {
     fetchData();
   }, []);
 
-  const filteredNotes = notes.filter(note => {
-    const matchesCategory = selectedCategory === 'All' || note.category === selectedCategory;
-    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           note.content.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const noteMatches = (note, cat = selectedCategory) => {
+    const matchesCategory = cat === 'All' || note.category === cat;
+    const q = searchQuery.toLowerCase();
+    const title = (note.title || '').toLowerCase();
+    const content = (note.content || '').toLowerCase();
+    return matchesCategory && (title.includes(q) || content.includes(q));
+  };
+
+  const filteredNotes = notes.filter(note => noteMatches(note)).sort(pinnedFirst);
+
+  // Selecting a category also syncs the editor: show that category's notes,
+  // or an empty editor when the category has none.
+  const selectCategory = (cat) => {
+    setSelectedCategory(cat);
+    const visible = notes.filter(note => noteMatches(note, cat)).sort(pinnedFirst);
+    const activeStillVisible = activeNote && visible.some(n => n._id === activeNote._id);
+    if (!activeStillVisible) {
+      setActiveNote(visible[0] || null);
+    }
+  };
 
   const handleAddCategory = async (categoryName) => {
     try {
@@ -196,20 +296,72 @@ const NotesPage = () => {
 
   const handleEditCategory = async (oldName, newName) => {
     try {
-      await axios.put(`/notes/categories/${oldName}`, { name: newName });
-      setCategories(categories.map(cat => cat === oldName ? newName : cat));
+      await axios.put(`/notes/categories/${encodeURIComponent(oldName)}`, { name: newName });
+      setCategories(prev => prev.map(cat => (cat === oldName ? newName : cat)));
+      setNotes(prev => prev.map(n => (n.category === oldName ? { ...n, category: newName } : n)));
+      setActiveNote(prev => (prev && prev.category === oldName ? { ...prev, category: newName } : prev));
+      if (selectedCategory === oldName) setSelectedCategory(newName);
       setEditingCategory(null);
       setShowCategoryModal(false);
     } catch (error) {
       console.error('Failed to edit category:', error);
-      alert('Failed to edit category');
+      alert(error.response?.data?.message || 'Failed to edit category');
     }
   };
 
   const handleDeleteCategory = async (categoryName) => {
     // open a modal to choose how to handle notes in the category
+    setDeleteOrMoveSelection('delete');
     setCategoryToDelete(categoryName);
     setShowDeleteCategoryModal(true);
+  };
+
+  const confirmDeleteCategory = async () => {
+    const val = deleteOrMoveSelection;
+    const notesInCat = notesInCategory.map(n => ({ ...n }));
+    try {
+      if (notesInCat.length > 0 && val === 'delete') {
+        setLastAction({ type: 'delete', notes: notesInCat, category: categoryToDelete });
+        await settleNoteOps(notesInCat.map(n => axios.delete(`/notes/${n._id}`)));
+      } else if (notesInCat.length > 0 && val.startsWith('move::')) {
+        const target = val.split('::')[1];
+        setLastAction({ type: 'move', notes: notesInCat.map(n => ({ _id: n._id, oldCategory: n.category })), from: categoryToDelete, to: target });
+        await settleNoteOps(notesInCat.map(n => axios.put(`/notes/${n._id}`, { category: target })));
+      }
+
+      await axios.delete(`/notes/categories/${encodeURIComponent(categoryToDelete)}`);
+
+      // update local state
+      if (notesInCat.length > 0 && val === 'delete') {
+        setNotes(prev => prev.filter(n => n.category !== categoryToDelete));
+        if (activeNote && activeNote.category === categoryToDelete) {
+          setActiveNote(null);
+        }
+      } else if (notesInCat.length > 0 && val.startsWith('move::')) {
+        const target = val.split('::')[1];
+        setNotes(prev => prev.map(n => (n.category === categoryToDelete ? { ...n, category: target } : n)));
+        if (activeNote && activeNote.category === categoryToDelete) {
+          setActiveNote({ ...activeNote, category: target });
+        }
+      }
+      setCategories(prev => prev.filter(c => c !== categoryToDelete));
+      if (selectedCategory === categoryToDelete) setSelectedCategory('All');
+      setShowDeleteCategoryModal(false);
+      setCategoryToDelete(null);
+
+      // show undo toast for 5s only when notes were affected
+      if (notesInCat.length > 0) {
+        setShowUndoToast(true);
+        if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+        undoTimerRef.current = setTimeout(() => {
+          setShowUndoToast(false);
+          setLastAction(null);
+        }, 5000);
+      }
+    } catch (err) {
+      console.error('Failed to process category deletion:', err);
+      alert(err.response?.data?.message || 'Could not delete the category. Please try again.');
+    }
   };
 
   const handleCreateNote = async () => {
@@ -287,32 +439,71 @@ const NotesPage = () => {
     };
   }, [activeNote?.title, activeNote?.content, activeNote?.category, activeNote?._id]);
 
-  const handleDeleteNote = async () => {
-    if (!activeNote) return;
-    if (window.confirm('Delete this note?')) {
-      try {
-        await axios.delete(`/notes/${activeNote._id}`);
-        const newNotes = notes.filter(n => n._id !== activeNote._id);
-        setNotes(newNotes);
-        setActiveNote(newNotes.length > 0 ? newNotes[0] : null);
-      } catch (error) {
-        console.error('Failed to delete note:', error);
-        alert('Failed to delete note');
-      }
+  const confirmDeleteNote = async () => {
+    const note = noteToDelete;
+    if (!note) return;
+    try {
+      await axios.delete(`/notes/${note._id}`);
+      setNotes(prev => prev.filter(n => n._id !== note._id));
+      setActiveNote(prev => {
+        if (!prev || prev._id !== note._id) return prev;
+        const next = notes.find(n => n._id !== note._id && noteMatches(n));
+        return next || null;
+      });
+    } catch (error) {
+      console.error('Failed to delete note:', error);
+      alert(error.response?.data?.message || 'Failed to delete note');
+    } finally {
+      setNoteToDelete(null);
     }
   };
 
-  const handlePinNote = async () => {
-    if (!activeNote) return;
+  const togglePinNote = async (note) => {
+    if (!note || !note._id) return;
     try {
-      const updated = { ...activeNote, isPinned: !activeNote.isPinned };
-      await axios.put(`/notes/${activeNote._id}`, updated);
-      setActiveNote(updated);
-      setNotes(notes.map(n => n._id === activeNote._id ? updated : n));
+      const res = await axios.put(`/notes/${note._id}`, { isPinned: !note.isPinned });
+      const patched = { isPinned: res.data.isPinned, lastEdited: res.data.lastEdited };
+      setNotes(prev => prev.map(n => (n._id === note._id ? { ...n, ...patched } : n)));
+      setActiveNote(prev => (prev && prev._id === note._id ? { ...prev, ...patched } : prev));
     } catch (error) {
-      console.error('Failed to pin note:', error);
+      console.error('Failed to update pin:', error);
+      alert(error.response?.data?.message || 'Failed to update pin');
     }
-  }
+  };
+
+  const handleMoveNote = async () => {
+    if (!movePrompt) return;
+    const { note, to } = movePrompt;
+    try {
+      await axios.put(`/notes/${note._id}`, { category: to });
+      setNotes(prev => prev.map(n => (n._id === note._id ? { ...n, category: to } : n)));
+      setActiveNote(prev => (prev && prev._id === note._id ? { ...prev, category: to } : prev));
+    } catch (error) {
+      console.error('Failed to move note:', error);
+      alert(error.response?.data?.message || 'Failed to move note');
+    } finally {
+      setMovePrompt(null);
+    }
+  };
+
+  const handleCopyNote = async () => {
+    if (!movePrompt) return;
+    const { note, to } = movePrompt;
+    try {
+      const res = await axios.post('/notes', {
+        title: note.title,
+        content: note.content || '',
+        category: to,
+        isPinned: false,
+      });
+      setNotes(prev => [res.data, ...prev]);
+    } catch (error) {
+      console.error('Failed to copy note:', error);
+      alert(error.response?.data?.message || 'Failed to copy note');
+    } finally {
+      setMovePrompt(null);
+    }
+  };
 
   if (loading) {
     return <NotesSkeleton />;
@@ -365,79 +556,52 @@ const NotesPage = () => {
       )}
       {/* Delete Category Modal */}
       {showDeleteCategoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-background border border-border rounded-2xl p-6 shadow-2xl max-w-lg w-full mx-4">
             <h2 className="text-lg font-semibold mb-3">Delete category "{categoryToDelete}"</h2>
-            <p className="text-sm text-muted-foreground mb-4">This category contains notes. Choose how to handle those notes:</p>
-            <label className="text-sm mb-2 block">Action</label>
-            <div className="flex items-center gap-3 mb-4">
-              <select
-                id="delete-or-move"
-                value={deleteOrMoveSelection}
-                onChange={(e) => setDeleteOrMoveSelection(e.target.value)}
-                className="flex-1 h-10 px-3 border border-border rounded-lg bg-secondary text-foreground"
-              >
-                <option value="delete">Delete notes ({notesInCategory.length})</option>
-                {categories.filter(c => c !== categoryToDelete).map(c => (
-                  <option key={c} value={`move::${c}`}>{`Move to: ${c}`}</option>
-                ))}
-              </select>
-
+            <p className="text-sm text-muted-foreground mb-4">
+              {notesInCategory.length > 0
+                ? `This category contains ${notesInCategory.length} note${notesInCategory.length === 1 ? '' : 's'}. Choose how to handle them:`
+                : 'This category is empty and will be removed.'}
+            </p>
+            {notesInCategory.length > 0 && (
+              <>
+                <label className="text-sm mb-2 block">Action</label>
+                <select
+                  id="delete-or-move"
+                  value={deleteOrMoveSelection}
+                  onChange={(e) => setDeleteOrMoveSelection(e.target.value)}
+                  className="w-full h-10 px-3 border border-border rounded-lg bg-secondary text-foreground mb-4"
+                >
+                  <option value="delete">Delete notes ({notesInCategory.length})</option>
+                  {categories.filter(c => c !== categoryToDelete).map(c => (
+                    <option key={c} value={`move::${c}`}>{`Move to: ${c}`}</option>
+                  ))}
+                </select>
+              </>
+            )}
+            <div className="flex justify-end gap-2">
               <button
-                onClick={async () => {
-                  const sel = document.getElementById('delete-or-move');
-                  const val = sel?.value;
-                  const notesInCat = notesInCategory.map(n => ({ ...n }));
-                  try {
-                    if (val === 'delete') {
-                      // capture for undo
-                      setLastAction({ type: 'delete', notes: notesInCat, category: categoryToDelete });
-                      await Promise.all(notesInCat.map(n => axios.delete(`/notes/${n._id}`)));
-                    } else if (val?.startsWith('move::')) {
-                      const target = val.split('::')[1];
-                      setLastAction({ type: 'move', notes: notesInCat.map(n => ({ _id: n._id, oldCategory: n.category })), from: categoryToDelete, to: target });
-                      await Promise.all(notesInCat.map(n => axios.put(`/notes/${n._id}`, { ...n, category: target })));
-                    }
-                    await axios.delete(`/notes/categories/${categoryToDelete}`);
-
-                    // update local state
-                    if (val === 'delete') {
-                      setNotes(prev => prev.filter(n => n.category !== categoryToDelete));
-                    } else if (val?.startsWith('move::')) {
-                      const target = val.split('::')[1];
-                      setNotes(prev => prev.map(n => n.category === categoryToDelete ? { ...n, category: target } : n));
-                    }
-                    setCategories(prev => prev.filter(c => c !== categoryToDelete));
-                    setSelectedCategory('All');
-                    setShowDeleteCategoryModal(false);
-                    setCategoryToDelete(null);
-                    if (activeNote && activeNote.category === categoryToDelete) {
-                      if (val === 'delete') setActiveNote(null);
-                      else setActiveNote({ ...activeNote, category: val.split('::')[1] });
-                    }
-
-                    // show undo toast for 5s
-                    setShowUndoToast(true);
-                    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-                    undoTimerRef.current = setTimeout(() => {
-                      setShowUndoToast(false);
-                      setLastAction(null);
-                    }, 5000);
-                  } catch (err) {
-                    console.error('Failed to process category deletion:', err);
-                    alert('Operation failed');
-                  }
-                }}
+                onClick={() => { setShowDeleteCategoryModal(false); setCategoryToDelete(null); }}
+                className="px-4 py-2 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteCategory}
                 className={cn(
-                  "h-10 px-4 rounded-lg",
-                  deleteOrMoveSelection === 'delete' ? "bg-destructive text-destructive-foreground" : "bg-primary text-primary-foreground"
+                  "h-10 px-4 rounded-lg transition-colors",
+                  deleteOrMoveSelection === 'delete' || notesInCategory.length === 0
+                    ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
                 )}
               >
-                {deleteOrMoveSelection === 'delete' ? 'Delete notes' : `Move to: ${deleteOrMoveSelection.split('::')[1]}`}
+                {notesInCategory.length === 0
+                  ? 'Delete category'
+                  : deleteOrMoveSelection === 'delete'
+                    ? 'Delete notes'
+                    : `Move to: ${deleteOrMoveSelection.split('::')[1]}`}
               </button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowDeleteCategoryModal(false); setCategoryToDelete(null); }} className="px-4 py-2 bg-secondary rounded-lg">Cancel</button>
             </div>
           </div>
         </div>
@@ -457,6 +621,21 @@ const NotesPage = () => {
         }}
         initialName={editingCategory || ''}
         isEdit={!!editingCategory}
+      />
+      <ConfirmModal
+        isOpen={!!noteToDelete}
+        title="Delete note"
+        message={noteToDelete ? `Are you sure you want to delete "${noteToDelete.title}"? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        danger
+        onConfirm={confirmDeleteNote}
+        onClose={() => setNoteToDelete(null)}
+      />
+      <MoveNoteModal
+        prompt={movePrompt}
+        onMove={handleMoveNote}
+        onCopy={handleCopyNote}
+        onKeep={() => setMovePrompt(null)}
       />
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -503,7 +682,7 @@ const NotesPage = () => {
             </div>
             <div className="space-y-1">
               <button
-                onClick={() => setSelectedCategory('All')}
+                onClick={() => selectCategory('All')}
                 className={cn(
                   "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
                   selectedCategory === 'All' ? "bg-primary text-white" : "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -519,20 +698,22 @@ const NotesPage = () => {
                 categories.map(cat => (
                   <div
                     key={cat}
+                    onClick={() => selectCategory(cat)}
                     className={cn(
-                      "group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                      "group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer",
                       selectedCategory === cat ? "bg-primary text-white" : "bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground"
                     )}
                   >
                     <button
-                      onClick={() => setSelectedCategory(cat)}
+                      onClick={() => selectCategory(cat)}
                       className="flex-1 text-left"
                     >
                       {cat}
                     </button>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setEditingCategory(cat);
                           setShowCategoryModal(true);
                         }}
@@ -542,7 +723,10 @@ const NotesPage = () => {
                         <Edit2 className="w-3 h-3" />
                       </button>
                       <button
-                        onClick={() => handleDeleteCategory(cat)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCategory(cat);
+                        }}
                         className="p-1 hover:bg-red-500/20 rounded transition-colors hover:text-red-500"
                         title="Delete category"
                       >
@@ -569,9 +753,48 @@ const NotesPage = () => {
                   : "bg-secondary/50 border-border hover:border-primary/50"
               )}
             >
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-[10px] text-muted-foreground font-medium mr-2">{note.category}</span>
-                {note.isPinned && <Pin className="w-3 h-3 text-primary" />}
+              <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveNote(note);
+                  }}
+                  className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+                  title="Edit note"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    togglePinNote(note);
+                  }}
+                  className={cn(
+                    "p-1 rounded transition-colors",
+                    note.isPinned
+                      ? "text-primary bg-primary/10 hover:bg-primary/20"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                  )}
+                  title={note.isPinned ? 'Unpin note' : 'Pin note to top'}
+                >
+                  <Pin className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNoteToDelete(note);
+                  }}
+                  className="p-1 rounded text-muted-foreground hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                  title="Delete note"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex justify-between items-start mb-1 pr-16">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {note.isPinned && <Pin className="w-3 h-3 text-primary shrink-0" />}
+                  <span className="text-[10px] text-muted-foreground font-medium truncate">{note.category}</span>
+                </div>
               </div>
               <div className="mb-1">
                 <h4 className="font-semibold text-sm truncate pr-4">{note.title}</h4>
@@ -605,19 +828,21 @@ const NotesPage = () => {
                 </div>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={handlePinNote}
+                    onClick={() => togglePinNote(activeNote)}
                     className={cn(
                       "p-2 rounded-md transition-colors",
                       activeNote?.isPinned
                         ? "text-primary bg-primary/10"
                         : "text-muted-foreground hover:bg-accent"
                     )}
+                    title={activeNote?.isPinned ? 'Unpin note' : 'Pin note to top'}
                   >
                     <Pin className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={handleDeleteNote}
+                    onClick={() => setNoteToDelete(activeNote)}
                     className="p-2 rounded-md hover:bg-accent text-destructive transition-colors"
+                    title="Delete note"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -640,7 +865,15 @@ const NotesPage = () => {
               <div className="flex-1 flex flex-col p-8 overflow-y-auto">
                 <select
                   value={activeNote.category || ''}
-                  onChange={(e) => setActiveNote({...activeNote, category: e.target.value})}
+                  onChange={(e) => {
+                    const target = e.target.value;
+                    if (!activeNote || !target || target === activeNote.category) return;
+                    setMovePrompt({
+                      note: activeNote,
+                      from: activeNote.category || 'General',
+                      to: target,
+                    });
+                  }}
                   className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm mb-4 text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="" disabled>Select a category</option>

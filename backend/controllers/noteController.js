@@ -101,16 +101,24 @@ exports.updateCategory = async (req, res) => {
       return res.status(400).json({ message: 'Category name is required' });
     }
     const newName = name.trim();
+    if (oldName === newName) {
+      return res.json(newName);
+    }
     const category = await Category.findOneAndUpdate(
       { user: req.user._id, name: oldName },
       { name: newName },
       { new: true }
     );
     if (!category) {
-      return res.status(404).json({ message: 'Category not found' });
+      // Category existed only as a note-derived name (no doc) — persist the new name.
+      try {
+        await Category.create({ user: req.user._id, name: newName });
+      } catch (createError) {
+        if (createError.code !== 11000) throw createError;
+      }
     }
     await Note.updateMany({ user: req.user._id, category: oldName }, { category: newName });
-    res.json(category.name);
+    res.json(newName);
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({ message: 'Category already exists' });
@@ -122,10 +130,9 @@ exports.updateCategory = async (req, res) => {
 exports.deleteCategory = async (req, res) => {
   try {
     const categoryName = req.params.name;
-    const category = await Category.findOneAndDelete({ user: req.user._id, name: categoryName });
-    if (!category) {
-      return res.status(404).json({ message: 'Category not found' });
-    }
+    // Idempotent: sidebar categories can be derived from notes (no Category doc),
+    // so a missing doc must not fail the delete.
+    await Category.deleteOne({ user: req.user._id, name: categoryName });
     await Note.updateMany({ user: req.user._id, category: categoryName }, { category: 'General' });
     res.json({ message: 'Category deleted' });
   } catch (error) {
