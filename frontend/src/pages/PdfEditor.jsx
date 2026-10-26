@@ -202,10 +202,10 @@ const PdfEditor = () => {
   const [pdf, setPdf] = useState(null);
   const [fileName, setFileName] = useState('');
   const [numPages, setNumPages] = useState(0);
-  const [pageIndex, setPageIndex] = useState(0);
+  const [pageIndex, setPageIndex] = useState(0); // active (most visible) page
+  const [pageDims, setPageDims] = useState([]); // per-page { w, h } at scale 1
   const [scale, setScale] = useState(1.1);
-  const [pageSize, setPageSize] = useState({ w: 0, h: 0 });
-  const [textItems, setTextItems] = useState([]);
+  const [textItemsMap, setTextItemsMap] = useState({}); // page -> extracted text items
   const [annotations, setAnnotations] = useState([]);
   const [tool, setTool] = useState('select');
   const [selectedId, setSelectedId] = useState(null);
@@ -217,17 +217,20 @@ const PdfEditor = () => {
   const [past, setPast] = useState([]);
   const [future, setFuture] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [rendering, setRendering] = useState(false);
+  const [renderBusy, setRenderBusy] = useState({});
   const [exporting, setExporting] = useState(false);
   const [showSignature, setShowSignature] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [visiblePages, setVisiblePages] = useState(() => new Set([0]));
 
   const pdfjsRef = useRef(null);
   const pdfBytesRef = useRef(null);
   const pageCacheRef = useRef({});
-  const renderTaskRef = useRef(null);
-  const canvasRef = useRef(null);
-  const overlayRef = useRef(null);
+  const renderTasksRef = useRef({});
+  const renderedRef = useRef({});
+  const visibleRef = useRef(new Set([0]));
+  const canvasRefs = useRef({});
+  const pageElsRef = useRef({});
   const containerRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
@@ -235,6 +238,8 @@ const PdfEditor = () => {
   const dragRef = useRef({ active: false });
   const resizeRef = useRef({ active: false });
   const editingRef = useRef(null);
+  const focusedRef = useRef(false);
+  const scrollRafRef = useRef(null);
   const didMountRef = useRef(false);
 
   const loadPdfJs = async () => {
@@ -256,7 +261,13 @@ const PdfEditor = () => {
       const buf = await file.arrayBuffer();
       const original = new Uint8Array(buf);
       pdfBytesRef.current = original;
+      Object.values(renderTasksRef.current).forEach(t => { try { t?.cancel(); } catch { /* ignore */ } });
       pageCacheRef.current = {};
+      renderedRef.current = {};
+      renderTasksRef.current = {};
+      canvasRefs.current = {};
+      pageElsRef.current = {};
+      visibleRef.current = new Set([0]);
       const pdfjs = await loadPdfJs();
       const doc = await pdfjs.getDocument({
         data: original.slice(),
@@ -264,13 +275,21 @@ const PdfEditor = () => {
         cMapPacked: true,
         standardFontDataUrl: '/pdfjs/standard_fonts/',
       }).promise;
-      const p1 = await doc.getPage(1);
-      const vp1 = p1.getViewport({ scale: 1 });
+      const dims = await Promise.all(
+        Array.from({ length: doc.numPages }, async (_, n) => {
+          const pg = await doc.getPage(n + 1);
+          const vp = pg.getViewport({ scale: 1 });
+          return { w: vp.width, h: vp.height };
+        })
+      );
       const cw = containerRef.current?.clientWidth || 900;
-      const fit = Math.min(1.6, Math.max(0.4, (cw - 64) / vp1.width));
+      const fit = Math.min(1.6, Math.max(0.4, (cw - 64) / (dims[0]?.w || 612)));
       setPdf(doc);
       setNumPages(doc.numPages);
       setPageIndex(0);
+      setPageDims(dims);
+      setTextItemsMap({});
+      setVisiblePages(new Set([0]));
       setScale(fit);
       setAnnotations([]);
       setPast([]);
@@ -286,67 +305,126 @@ const PdfEditor = () => {
     }
   };
 
-  // Render current page + extract text
+  // Render one page's canvas (+ extract its text) on demand
+  const renderPageTo = useCallback(async (i) => {
+    if (!pdf) return;
+    const canvas = canvasRefs.current[i];
+    if (!canvas) return;
+    const key = `${i}:${scale}`;
+    if (renderedRef.current[i] === key) return;
+    setRenderBusy(m => ({ ...m, [i]: true }));
+    try {
+      const page = await pdf.getPage(i + 1);
+      let cached = pageCacheRef.current[i];
+      if (!cached) {
+        const vp1 = page.getViewport({ scale: 1 });
+        const tc = await page.getTextContent();
+        const pdfjs = pdfjsRef.current;
+        const items = tc.items
+          .filter(it => it.str && it.str.trim())
+          .map(it => {
+            const t = pdfjs.Util.transform(vp1.transform, it.transform);
+            const fontHeight = Math.hypot(t[2], t[3]) || it.height || 12;
+            return {
+              id: uid(),
+              str: it.str,
+              x: t[4],
+              baseline: t[5],
+              fontHeight,
+              w: it.width || it.str.length * fontHeight * 0.5,
+              top: t[5] - fontHeight * 0.85,
+              h: fontHeight * 1.15,
+            };
+          });
+        cached = { w: vp1.width, h: vp1.height, items };
+        pageCacheRef.current[i] = cached;
+        setTextItemsMap(prev => (prev[i] ? prev : { ...prev, [i]: items }));
+      }
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const viewport = page.getViewport({ scale: scale * dpr });
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      if (renderTasksRef.current[i]) {
+        try { renderTasksRef.current[i].cancel(); } catch { /* ignore */ }
+      }
+      const task = page.render({ canvasContext: canvas.getContext('2d'), viewport, background: '#ffffff' });
+      renderTasksRef.current[i] = task;
+      try { await task.promise; } catch (err) {
+        if (err && err.name !== 'RenderingCancelledException') console.error(err);
+      }
+      renderedRef.current[i] = key;
+    } catch (err) {
+      console.error(`Failed to render page ${i + 1}:`, err);
+    } finally {
+      setRenderBusy(m => ({ ...m, [i]: false }));
+    }
+  }, [pdf, scale]);
+
+  // Render pages that are (or are about to be) in view
   useEffect(() => {
     if (!pdf) return undefined;
     let cancelled = false;
-    const run = async () => {
-      setRendering(true);
-      try {
-        const page = await pdf.getPage(pageIndex + 1);
-        const vp1 = page.getViewport({ scale: 1 });
-        let cached = pageCacheRef.current[pageIndex];
-        if (!cached) {
-          const tc = await page.getTextContent();
-          const pdfjs = pdfjsRef.current;
-          const items = tc.items
-            .filter(it => it.str && it.str.trim())
-            .map(it => {
-              const t = pdfjs.Util.transform(vp1.transform, it.transform);
-              const fontHeight = Math.hypot(t[2], t[3]) || it.height || 12;
-              return {
-                id: uid(),
-                str: it.str,
-                x: t[4],
-                baseline: t[5],
-                fontHeight,
-                w: it.width || it.str.length * fontHeight * 0.5,
-                top: t[5] - fontHeight * 0.85,
-                h: fontHeight * 1.15,
-              };
-            });
-          cached = { w: vp1.width, h: vp1.height, items };
-          pageCacheRef.current[pageIndex] = cached;
-        }
+    (async () => {
+      const pages = [...visiblePages].sort((a, b) => a - b);
+      for (const i of pages) {
         if (cancelled) return;
-        setPageSize({ w: cached.w, h: cached.h });
-        setTextItems(cached.items);
-
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const viewport = page.getViewport({ scale: scale * dpr });
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        canvas.style.width = `${Math.floor(viewport.width) / dpr}px`;
-        canvas.style.height = `${Math.floor(viewport.height) / dpr}px`;
-        if (renderTaskRef.current) {
-          try { renderTaskRef.current.cancel(); } catch { /* ignore */ }
-        }
-        const task = page.render({ canvasContext: canvas.getContext('2d'), viewport, background: '#ffffff' });
-        renderTaskRef.current = task;
-        try { await task.promise; } catch (e) {
-          if (e && e.name !== 'RenderingCancelledException') console.error(e);
-        }
-      } catch (err) {
-        console.error('Failed to render page:', err);
-      } finally {
-        if (!cancelled) setRendering(false);
+        await renderPageTo(i);
       }
-    };
-    run();
+    })();
     return () => { cancelled = true; };
-  }, [pdf, pageIndex, scale]);
+  }, [pdf, visiblePages, renderPageTo]);
+
+  // Lazily track which pages are near the viewport
+  useEffect(() => {
+    if (!pdf || !pageDims.length) return undefined;
+    const root = containerRef.current;
+    if (!root) return undefined;
+    const io = new IntersectionObserver((entries) => {
+      let changed = false;
+      const vis = new Set(visibleRef.current);
+      for (const en of entries) {
+        const i = Number(en.target.dataset.page);
+        if (en.isIntersecting) { if (!vis.has(i)) { vis.add(i); changed = true; } }
+        else if (vis.has(i)) { vis.delete(i); changed = true; }
+      }
+      if (changed) {
+        visibleRef.current = vis;
+        setVisiblePages(new Set(vis));
+      }
+    }, { root, rootMargin: '400px 0px', threshold: 0 });
+    for (const el of Object.values(pageElsRef.current)) if (el) io.observe(el);
+    return () => io.disconnect();
+  }, [pdf, pageDims]);
+
+  // Keep the toolbar page indicator in sync with the page under the viewport center
+  const handleScroll = () => {
+    if (scrollRafRef.current) return;
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      const c = containerRef.current;
+      if (!c) return;
+      const cRect = c.getBoundingClientRect();
+      const mid = cRect.top + cRect.height / 2;
+      let best = 0;
+      let bestDist = Infinity;
+      for (const key of Object.keys(pageElsRef.current)) {
+        const i = Number(key);
+        const el = pageElsRef.current[i];
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        const d = Math.abs(r.top + r.height / 2 - mid);
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+      setPageIndex(best);
+    });
+  };
+
+  useEffect(() => () => {
+    Object.values(renderTasksRef.current).forEach(t => { try { t?.cancel(); } catch { /* ignore */ } });
+    cancelAnimationFrame(scrollRafRef.current);
+  }, []);
+
+  useEffect(() => { containerRef.current?.scrollTo({ top: 0 }); }, [pdf]);
 
   const pushHistory = useCallback(() => {
     setPast(prev => [...prev.slice(-49), annotations]);
@@ -382,15 +460,15 @@ const PdfEditor = () => {
     setSelectedId(null);
   };
 
-  const toInternal = useCallback((clientX, clientY) => {
-    const overlay = overlayRef.current;
-    if (!overlay) return { x: 0, y: 0 };
-    const rect = overlay.getBoundingClientRect();
-    return { x: (clientX - rect.left) / scale, y: (clientY - rect.top) / scale };
+  const toInternal = useCallback((e, svg) => {
+    if (!svg) return { x: 0, y: 0 };
+    const rect = svg.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) / scale, y: (e.clientY - rect.top) / scale };
   }, [scale]);
 
   const openEditor = (payload) => {
     editingRef.current = payload;
+    focusedRef.current = false;
     setEditing(payload);
   };
 
@@ -405,6 +483,7 @@ const PdfEditor = () => {
     if (!e) return;
     editingRef.current = null;
     setEditing(null);
+    const pg = e.pageIndex ?? pageIndex;
     const value = e.value;
     if (!value.trim()) {
       if (e.id) {
@@ -417,12 +496,12 @@ const PdfEditor = () => {
     if (e.detected) {
       const pad = 2;
       const wipe = {
-        id: uid(), type: 'remove', pageIndex,
+        id: uid(), type: 'remove', pageIndex: pg,
         x: e.detected.x - pad, y: e.detected.top - pad,
         w: e.detected.w + pad * 2, h: e.detected.h + pad * 2,
       };
       const text = {
-        id: uid(), type: 'text', pageIndex,
+        id: uid(), type: 'text', pageIndex: pg,
         x: e.detected.x, baseline: e.detected.baseline,
         text: value, size: e.detected.fontHeight, color: e.color, fontFamily: e.fontFamily,
       };
@@ -431,20 +510,21 @@ const PdfEditor = () => {
       setAnnotations(prev => prev.map(a => a.id === e.id ? { ...a, text: value, size: e.size, color: e.color, fontFamily: e.fontFamily } : a));
     } else {
       setAnnotations(prev => [...prev, {
-        id: uid(), type: 'text', pageIndex,
+        id: uid(), type: 'text', pageIndex: pg,
         x: e.x, baseline: e.baseline, text: value,
         size: e.size, color: e.color, fontFamily: e.fontFamily,
       }]);
     }
   }, [pageIndex, pushHistory]);
 
-  const handleOverlayPointerDown = (e) => {
+  const handleOverlayPointerDown = (e, i) => {
     if (editingRef.current) {
       commitEditor();
       return;
     }
     if (e.button !== 0) return;
-    const p = toInternal(e.clientX, e.clientY);
+    setPageIndex(i);
+    const p = toInternal(e, e.currentTarget);
 
     if (tool === 'select') {
       setSelectedId(null);
@@ -453,17 +533,20 @@ const PdfEditor = () => {
     if (tool === 'edittext' || tool === 'eraser' || tool === 'image' || tool === 'signature') return;
 
     if (tool === 'text') {
+      // Cancel the browser's default mousedown focus steal — otherwise the
+      // freshly mounted textarea is blurred instantly and the editor closes.
+      e.preventDefault();
       const size = appearance.fontSize;
       openEditor({
-        id: null, x: p.x, baseline: p.y + size * 0.82, value: '',
+        id: null, pageIndex: i, x: p.x, baseline: p.y + size * 0.82, value: '',
         size, color: appearance.color, fontFamily: appearance.fontFamily,
       });
       return;
     }
 
-    drawRef.current = { active: true, mode: tool, start: p, points: [p] };
-    setDraft(makeDraft(tool, p, p));
-    overlayRef.current.setPointerCapture(e.pointerId);
+    drawRef.current = { active: true, mode: tool, start: p, points: [p], pageIndex: i };
+    setDraft({ ...makeDraft(tool, p, p), pageIndex: i });
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const makeDraft = (mode, start, cur) => {
@@ -482,7 +565,7 @@ const PdfEditor = () => {
   const handleOverlayPointerMove = (e) => {
     if (dragRef.current.active) {
       const d = dragRef.current;
-      const p = toInternal(e.clientX, e.clientY);
+      const p = toInternal(e, e.currentTarget);
       const dx = p.x - d.last.x;
       const dy = p.y - d.last.y;
       d.last = p;
@@ -497,7 +580,7 @@ const PdfEditor = () => {
     }
     if (resizeRef.current.active) {
       const r = resizeRef.current;
-      const p = toInternal(e.clientX, e.clientY);
+      const p = toInternal(e, e.currentTarget);
       const w = Math.max(8, p.x - r.x);
       const h = Math.max(8, p.y - r.y);
       setAnnotations(prev => prev.map(a => {
@@ -512,16 +595,16 @@ const PdfEditor = () => {
     }
     const d = drawRef.current;
     if (!d.active) return;
-    const p = toInternal(e.clientX, e.clientY);
+    const p = toInternal(e, e.currentTarget);
     if (d.mode === 'draw') {
       const lastP = d.points[d.points.length - 1];
       if (Math.hypot(p.x - lastP.x, p.y - lastP.y) > 1) {
         d.points.push(p);
-        setDraft({ id: 'draft', type: 'draw', points: d.points.slice(), color: appearance.color, strokeWidth: appearance.strokeWidth });
+        setDraft({ id: 'draft', type: 'draw', points: d.points.slice(), color: appearance.color, strokeWidth: appearance.strokeWidth, pageIndex: d.pageIndex });
       }
     } else {
       d.cur = p;
-      setDraft(makeDraft(d.mode, d.start, p));
+      setDraft({ ...makeDraft(d.mode, d.start, p), pageIndex: d.pageIndex });
     }
   };
 
@@ -534,11 +617,11 @@ const PdfEditor = () => {
     setDraft(null);
     if (d.mode === 'draw') {
       if (d.points.length < 2) return;
-      addAnnotation({ id: uid(), type: 'draw', pageIndex, points: d.points.slice(), color: appearance.color, strokeWidth: appearance.strokeWidth });
+      addAnnotation({ id: uid(), type: 'draw', pageIndex: d.pageIndex, points: d.points.slice(), color: appearance.color, strokeWidth: appearance.strokeWidth });
     } else {
       const finalShape = makeDraft(d.mode, d.start, d.cur || d.start);
       if (finalShape.w < 4 || finalShape.h < 4) return;
-      addAnnotation({ ...finalShape, id: uid(), pageIndex });
+      addAnnotation({ ...finalShape, id: uid(), pageIndex: d.pageIndex });
     }
   };
 
@@ -552,36 +635,40 @@ const PdfEditor = () => {
     e.stopPropagation();
     if (editingRef.current) { commitEditor(); return; }
     setSelectedId(a.id);
-    dragRef.current = { active: true, id: a.id, moved: false, last: toInternal(e.clientX, e.clientY) };
-    overlayRef.current.setPointerCapture(e.pointerId);
+    setPageIndex(a.pageIndex);
+    const svg = e.currentTarget.ownerSVGElement;
+    dragRef.current = { active: true, id: a.id, moved: false, last: toInternal(e, svg) };
+    svg.setPointerCapture(e.pointerId);
   };
 
   const startResize = (e, a) => {
     e.stopPropagation();
     const b = getAnnBounds(a);
+    const svg = e.currentTarget.ownerSVGElement;
     resizeRef.current = {
       active: true, id: a.id, x: b.x, y: b.y,
       keepRatio: a.type === 'image' || a.type === 'signature',
       ratio: b.w / (b.h || 1),
     };
-    overlayRef.current.setPointerCapture(e.pointerId);
+    svg.setPointerCapture(e.pointerId);
   };
 
   const handleImageFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const dim = pageDims[pageIndex] || { w: 612, h: 792 };
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
       const img = new window.Image();
       img.onload = () => {
-        const maxW = Math.min(pageSize.w * 0.4, 260);
+        const maxW = Math.min(dim.w * 0.4, 260);
         const ratio = img.height / img.width;
         const w = maxW;
         const h = maxW * ratio;
         addAnnotation({
           id: uid(), type: 'image', pageIndex,
-          x: (pageSize.w - w) / 2, y: Math.max(20, pageSize.h * 0.18),
+          x: (dim.w - w) / 2, y: Math.max(20, dim.h * 0.18),
           w, h, src: dataUrl,
         });
       };
@@ -593,15 +680,16 @@ const PdfEditor = () => {
 
   const applySignature = (dataUrl) => {
     setShowSignature(false);
+    const dim = pageDims[pageIndex] || { w: 612, h: 792 };
     const img = new window.Image();
     img.onload = () => {
-      const maxW = Math.min(pageSize.w * 0.35, 220);
+      const maxW = Math.min(dim.w * 0.35, 220);
       const ratio = img.height / img.width;
       const w = maxW;
       const h = maxW * ratio;
       addAnnotation({
         id: uid(), type: 'signature', pageIndex,
-        x: (pageSize.w - w) / 2, y: pageSize.h * 0.68,
+        x: (dim.w - w) / 2, y: dim.h * 0.68,
         w, h, src: dataUrl,
       });
       setTool('select');
@@ -720,9 +808,11 @@ const PdfEditor = () => {
 
   useEffect(() => { if (!didMountRef.current) { didMountRef.current = true; } }, []);
 
-  const pageAnns = annotations.filter(a => a.pageIndex === pageIndex);
-  const W = pageSize.w * scale;
-  const H = pageSize.h * scale;
+  const goToPage = (i) => {
+    const el = pageElsRef.current[i];
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const renderObject = (a) => {
     const interactive = tool === 'select' || tool === 'eraser';
@@ -785,8 +875,7 @@ const PdfEditor = () => {
     }
   };
 
-  const selectedAnn = pageAnns.find(a => a.id === selectedId);
-  const selBounds = selectedAnn ? getAnnBounds(selectedAnn) : null;
+  const selectedAnn = annotations.find(a => a.id === selectedId);
 
   if (!pdf) {
     if (loading) return <PdfEditorSkeleton />;
@@ -964,7 +1053,7 @@ const PdfEditor = () => {
           {/* toolbar */}
           <div className="p-2 border-b border-border flex items-center gap-1 flex-wrap bg-background/20 backdrop-blur-sm">
             <button
-              onClick={() => setPageIndex(i => Math.max(0, i - 1))}
+              onClick={() => goToPage(pageIndex - 1)}
               disabled={pageIndex === 0}
               className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30"
               title="Previous page"
@@ -975,7 +1064,7 @@ const PdfEditor = () => {
               <span className="text-foreground font-medium">{pageIndex + 1}</span> / {numPages}
             </span>
             <button
-              onClick={() => setPageIndex(i => Math.min(numPages - 1, i + 1))}
+              onClick={() => goToPage(pageIndex + 1)}
               disabled={pageIndex >= numPages - 1}
               className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-30"
               title="Next page"
@@ -992,7 +1081,7 @@ const PdfEditor = () => {
               <Redo2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => { if (pageAnns.length && window.confirm('Clear edits on this page?')) { pushHistory(); setAnnotations(prev => prev.filter(a => a.pageIndex !== pageIndex)); setSelectedId(null); } }}
+              onClick={() => { if (annotations.some(a => a.pageIndex === pageIndex) && window.confirm('Clear edits on this page?')) { pushHistory(); setAnnotations(prev => prev.filter(a => a.pageIndex !== pageIndex)); setSelectedId(null); } }}
               className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-destructive transition-colors"
               title="Clear page edits"
             >
@@ -1010,7 +1099,8 @@ const PdfEditor = () => {
               <button
                 onClick={() => {
                   const cw = containerRef.current?.clientWidth || 900;
-                  setScale(Math.min(1.6, Math.max(0.4, (cw - 64) / pageSize.w)));
+                  const dim = pageDims[pageIndex] || { w: 612 };
+                  setScale(Math.min(1.6, Math.max(0.4, (cw - 64) / dim.w)));
                 }}
                 className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
                 title="Fit width"
@@ -1020,105 +1110,134 @@ const PdfEditor = () => {
             </div>
           </div>
 
-          {/* page area */}
-          <div ref={containerRef} className="flex-1 overflow-auto bg-[#1b1b1f] flex items-start justify-center p-6">
-            <div className="relative shadow-2xl" style={{ width: W, height: H }}>
-              <canvas ref={canvasRef} className="block bg-white" />
-              <svg
-                ref={overlayRef}
-                className="absolute inset-0 touch-none"
-                width={W}
-                height={H}
-                style={{ cursor: tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : tool === 'edittext' ? 'text' : 'crosshair' }}
-                onPointerDown={handleOverlayPointerDown}
-                onPointerMove={handleOverlayPointerMove}
-                onPointerUp={handleOverlayPointerUp}
-              >
-                {pageAnns.map(a => (
-                  <g key={a.id} onPointerDown={(e) => handleObjectPointerDown(e, a)} onDoubleClick={(e) => {
-                    if (tool === 'select' && a.type === 'text') {
-                      e.stopPropagation();
-                      openEditor({ id: a.id, x: a.x, baseline: a.baseline, value: a.text, size: a.size, color: a.color, fontFamily: a.fontFamily });
-                    }
-                  }}>
-                    {renderObject(a)}
-                  </g>
-                ))}
-                {draft && <g style={{ pointerEvents: 'none' }}>{renderObject(draft)}</g>}
-                {selBounds && (
-                  <g>
-                    <rect
-                      x={selBounds.x * scale - 4}
-                      y={selBounds.y * scale - 4}
-                      width={selBounds.w * scale + 8}
-                      height={selBounds.h * scale + 8}
-                      fill="none"
-                      stroke="hsl(var(--primary))"
-                      strokeWidth={1.5}
-                      strokeDasharray="5 3"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                    {(selectedAnn.type === 'image' || selectedAnn.type === 'signature' || BOX_TYPES.includes(selectedAnn.type)) && (
-                      <rect
-                        x={(selBounds.x + selBounds.w) * scale - 5}
-                        y={(selBounds.y + selBounds.h) * scale - 5}
-                        width={10}
-                        height={10}
-                        fill="hsl(var(--primary))"
-                        style={{ cursor: 'nwse-resize', pointerEvents: 'all' }}
-                        onPointerDown={(e) => startResize(e, selectedAnn)}
-                      />
+          {/* page area — all pages stacked, scroll like a normal PDF viewer */}
+          <div
+            ref={containerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-auto bg-[#1b1b1f] flex flex-col items-center gap-6 p-6"
+          >
+            {pageDims.map((dim, i) => {
+              const pw = dim.w * scale;
+              const ph = dim.h * scale;
+              const anns = annotations.filter(a => a.pageIndex === i);
+              const selAnn = anns.find(a => a.id === selectedId);
+              const sb = selAnn ? getAnnBounds(selAnn) : null;
+              const items = textItemsMap[i] || [];
+              return (
+                <div
+                  key={i}
+                  data-page={i}
+                  ref={(el) => { if (el) pageElsRef.current[i] = el; }}
+                  className="relative shadow-2xl overflow-hidden shrink-0"
+                  style={{ width: pw, height: ph }}
+                >
+                  <canvas
+                    ref={(el) => { if (el) canvasRefs.current[i] = el; }}
+                    className="block bg-white"
+                    style={{ width: pw, height: ph }}
+                  />
+                  <svg
+                    className="absolute inset-0 touch-none"
+                    width={pw}
+                    height={ph}
+                    style={{ cursor: tool === 'select' ? 'default' : tool === 'eraser' ? 'cell' : tool === 'edittext' ? 'text' : 'crosshair' }}
+                    onPointerDown={(e) => handleOverlayPointerDown(e, i)}
+                    onPointerMove={handleOverlayPointerMove}
+                    onPointerUp={handleOverlayPointerUp}
+                  >
+                    {anns.map(a => (
+                      <g key={a.id} onPointerDown={(e) => handleObjectPointerDown(e, a)} onDoubleClick={(e) => {
+                        if (tool === 'select' && a.type === 'text') {
+                          e.stopPropagation();
+                          openEditor({ id: a.id, pageIndex: a.pageIndex, x: a.x, baseline: a.baseline, value: a.text, size: a.size, color: a.color, fontFamily: a.fontFamily });
+                        }
+                      }}>
+                        {renderObject(a)}
+                      </g>
+                    ))}
+                    {draft && draft.pageIndex === i && <g style={{ pointerEvents: 'none' }}>{renderObject(draft)}</g>}
+                    {sb && (
+                      <g>
+                        <rect
+                          x={sb.x * scale - 4}
+                          y={sb.y * scale - 4}
+                          width={sb.w * scale + 8}
+                          height={sb.h * scale + 8}
+                          fill="none"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={1.5}
+                          strokeDasharray="5 3"
+                          style={{ pointerEvents: 'none' }}
+                        />
+                        {(selAnn.type === 'image' || selAnn.type === 'signature' || BOX_TYPES.includes(selAnn.type)) && (
+                          <rect
+                            x={(sb.x + sb.w) * scale - 5}
+                            y={(sb.y + sb.h) * scale - 5}
+                            width={10}
+                            height={10}
+                            fill="hsl(var(--primary))"
+                            style={{ cursor: 'nwse-resize', pointerEvents: 'all' }}
+                            onPointerDown={(e) => startResize(e, selAnn)}
+                          />
+                        )}
+                      </g>
                     )}
-                  </g>
-                )}
-              </svg>
+                  </svg>
 
-              {/* text detection overlay */}
-              {tool === 'edittext' && textItems.map(it => (
-                <button
-                  key={it.id}
-                  className="absolute z-10 rounded-sm border border-primary/50 bg-primary/10 hover:bg-primary/25 transition-colors"
-                  style={{ left: it.x * scale, top: it.top * scale, width: Math.max(it.w * scale, 6), height: Math.max(it.h * scale, 6) }}
-                  title={`Edit: ${it.str}`}
-                  onClick={() => openEditor({
-                    id: null, detected: it, x: it.x, baseline: it.baseline, value: it.str,
-                    size: it.fontHeight, color: appearance.color, fontFamily: appearance.fontFamily,
-                  })}
-                />
-              ))}
+                  {/* text detection overlay */}
+                  {tool === 'edittext' && items.map(it => (
+                    <button
+                      key={it.id}
+                      className="absolute z-10 rounded-sm border border-primary/50 bg-primary/10 hover:bg-primary/25 transition-colors"
+                      style={{ left: it.x * scale, top: it.top * scale, width: Math.max(it.w * scale, 6), height: Math.max(it.h * scale, 6) }}
+                      title={`Edit: ${it.str}`}
+                      onClick={() => openEditor({
+                        id: null, pageIndex: i, detected: it, x: it.x, baseline: it.baseline, value: it.str,
+                        size: it.fontHeight, color: appearance.color, fontFamily: appearance.fontFamily,
+                      })}
+                    />
+                  ))}
 
-              {/* text editor */}
-              {editing && (
-                <textarea
-                  autoFocus
-                  value={editing.value}
-                  onChange={(e) => updateEditor(prev => ({ ...prev, value: e.target.value }))}
-                  onBlur={commitEditor}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditor(); }
-                    else if (e.key === 'Escape') { editingRef.current = null; setEditing(null); }
-                  }}
-                  className="absolute z-20 bg-white/95 border-2 border-primary outline-none resize-none p-0 px-0.5 m-0 overflow-hidden text-black shadow-lg"
-                  style={{
-                    left: editing.x * scale,
-                    top: (editing.baseline - editing.size * 0.86) * scale,
-                    minWidth: Math.max(120, editing.value.length * editing.size * 0.6) * scale,
-                    fontSize: editing.size * scale,
-                    lineHeight: 1.15,
-                    fontFamily: FONTS.find(f => f.id === editing.fontFamily)?.css || FONTS[0].css,
-                    color: editing.color,
-                    height: Math.max(editing.size * scale * 1.3, 20),
-                  }}
-                  rows={1}
-                />
-              )}
+                  {/* text editor */}
+                  {editing && editing.pageIndex === i && (
+                    <textarea
+                      autoFocus
+                      value={editing.value}
+                      onChange={(e) => updateEditor(prev => ({ ...prev, value: e.target.value }))}
+                      onFocus={() => { focusedRef.current = true; }}
+                      onBlur={() => {
+                        // Guard against the browser stealing focus the instant the
+                        // textarea mounts (would close the editor before you can type).
+                        if (!focusedRef.current) { editingRef.current = null; setEditing(null); return; }
+                        commitEditor();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditor(); }
+                        else if (e.key === 'Escape') { editingRef.current = null; setEditing(null); }
+                      }}
+                      className="absolute z-20 bg-white/95 border-2 border-primary outline-none resize-none p-0 px-0.5 m-0 overflow-hidden text-black shadow-lg"
+                      style={{
+                        left: editing.x * scale,
+                        top: (editing.baseline - editing.size * 0.86) * scale,
+                        minWidth: Math.max(120, editing.value.length * editing.size * 0.6) * scale,
+                        fontSize: editing.size * scale,
+                        lineHeight: 1.15,
+                        fontFamily: FONTS.find(f => f.id === editing.fontFamily)?.css || FONTS[0].css,
+                        color: editing.color,
+                        height: Math.max(editing.size * scale * 1.3, 20),
+                      }}
+                      rows={1}
+                    />
+                  )}
 
-              {rendering && (
-                <div className="absolute top-3 right-3 z-30 flex items-center gap-2 text-xs bg-secondary/90 border border-border rounded-full px-3 py-1">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Rendering
+                  {renderBusy[i] && (
+                    <div className="absolute top-3 right-3 z-30 flex items-center gap-2 text-xs bg-secondary/90 border border-border rounded-full px-3 py-1">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Rendering
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>
