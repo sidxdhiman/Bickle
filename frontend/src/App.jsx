@@ -141,7 +141,15 @@ const App = () => {
   }, [guest, endGuest]);
 
   if (!hasCheckedAuth) {
-    return <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">Loading...</div>;
+    const onSidArt = window.location.pathname.startsWith('/sid-art');
+    return (
+      <div
+        className="flex h-screen items-center justify-center"
+        style={onSidArt ? { backgroundColor: '#F7F2E7', color: 'rgba(11, 11, 11, 0.4)' } : undefined}
+      >
+        Loading...
+      </div>
+    );
   }
 
   if (guestError) {

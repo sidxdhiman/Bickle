@@ -13,6 +13,12 @@
     </style>
   </head>
   <body>
+    <script>
+      if (location.pathname.startsWith('/sid-art')) {
+        document.documentElement.style.backgroundColor = '#F7F2E7';
+        document.body.style.backgroundColor = '#F7F2E7';
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

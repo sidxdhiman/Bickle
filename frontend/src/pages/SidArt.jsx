@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
 import {
   Phone, Mail, Linkedin, Github, X, MapPin, CalendarDays,
-  Camera, Loader2, Image as ImageIcon, Clapperboard, Music4, FileText,
+  Camera, Image as ImageIcon, Clapperboard, Music4, FileText,
 } from 'lucide-react';
 import axios from 'axios';
 import MusicPlayer from '../components/art/MusicPlayer';
@@ -58,10 +58,52 @@ const EmptyState = ({ message }) => (
   </div>
 );
 
-const LoadingState = () => (
-  <div className="mt-16 flex items-center justify-center gap-3 text-[10px] uppercase tracking-[0.4em] text-black/40">
-    <Loader2 className="w-4 h-4 animate-spin" />
-    Loading the studio
+const BONE = 'animate-pulse bg-black/[0.06]';
+
+const SectionSkeleton = ({ label, index, total, kind }) => (
+  <div>
+    <SectionHeading label={label} index={index} total={total} count={0} />
+    {kind === 'photographs' && (
+      <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className={`aspect-[4/5] border border-black/10 ${BONE}`} />
+        ))}
+      </div>
+    )}
+    {kind === 'videos' && (
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`border border-black/10 ${BONE}`}>
+            <div className="aspect-video" />
+            <div className="px-4 py-4 space-y-2">
+              <div className="h-5 w-2/3 bg-black/10" />
+              <div className="h-2 w-1/2 bg-black/10" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+    {kind === 'music' && (
+      <div className="mt-8 space-y-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className={`border border-black/10 p-4 sm:p-5 ${BONE}`}>
+            <div className="h-14 w-full bg-black/[0.04]" />
+          </div>
+        ))}
+      </div>
+    )}
+    {kind === 'blogs' && (
+      <div className="mt-8 space-y-5">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className={`border border-black/10 px-5 sm:px-7 py-5 sm:py-6 ${BONE}`}>
+            <div className="h-7 w-1/2 bg-black/10" />
+            <div className="mt-3 h-2 w-1/3 bg-black/10" />
+            <div className="mt-4 h-3 w-full bg-black/[0.07]" />
+            <div className="mt-2 h-3 w-4/5 bg-black/[0.07]" />
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 );
 
@@ -84,10 +126,11 @@ const SidArt = () => {
   const [content, setContent] = useState(EMPTY);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [openBlogId, setOpenBlogId] = useState(null);
-  const [activeTrackId, setActiveTrackId] = useState(null);
+  const [openBlogId, setOpenBlogId] = useState(undefined);
+  const [activeTrackId, setActiveTrackId] = useState(undefined);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const scrollRef = useRef(null);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -125,16 +168,15 @@ const SidArt = () => {
     loadContent();
   }, []);
 
-  useEffect(() => {
-    if (!openBlogId && content.blogs.length) setOpenBlogId(content.blogs[0]._id);
-  }, [content.blogs, openBlogId]);
-
-  useEffect(() => {
-    if (!activeTrackId && content.music.length) setActiveTrackId(content.music[0]._id);
-  }, [content.music, activeTrackId]);
-
   const currentIndex = NAV_ITEMS.findIndex((item) => item.key === active) + 1;
-  const activeTrack = content.music.find((track) => track._id === activeTrackId);
+  const openId = openBlogId === undefined ? (content.blogs[0]?._id ?? null) : openBlogId;
+  const activeId = activeTrackId === undefined ? (content.music[0]?._id ?? null) : activeTrackId;
+
+  const handleSectionChange = (key) => {
+    if (key === active) return;
+    setActive(key);
+    scrollRef.current?.scrollTo({ top: 0 });
+  };
 
   const renderBlogs = () => (
     <div>
@@ -144,7 +186,7 @@ const SidArt = () => {
       ) : (
         <div className="mt-8 space-y-5">
           {content.blogs.map((blog) => {
-            const isOpen = blog._id === openBlogId;
+            const isOpen = blog._id === openId;
             const paragraphs = splitParagraphs(blog.content);
             const excerpt = paragraphs[0]?.slice(0, 180);
             return (
@@ -175,10 +217,10 @@ const SidArt = () => {
                 <AnimatePresence initial={false}>
                   {isOpen && (
                     <motion.div
-                      initial={{ height: 0, opacity: 0 }}
+                      initial={openBlogId === undefined ? false : { height: 0, opacity: 0 }}
                       animate={{ height: 'auto', opacity: 1 }}
                       exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.75, ease: EASE }}
+                      transition={{ duration: 0.5, ease: EASE }}
                       className="overflow-hidden"
                     >
                       <div className="px-5 sm:px-7 pb-8 border-t border-black/10 pt-6">
@@ -224,9 +266,9 @@ const SidArt = () => {
             <motion.button
               key={photo._id}
               type="button"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(index * 0.05, 0.5), duration: 0.8, ease: EASE }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: Math.min(index * 0.03, 0.25), duration: 0.45, ease: 'easeOut' }}
               onClick={() => setSelectedPhoto(photo)}
               className="group relative aspect-[4/5] overflow-hidden border border-black/15"
             >
@@ -257,9 +299,9 @@ const SidArt = () => {
             <motion.button
               key={video._id}
               type="button"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(index * 0.08, 0.5), duration: 0.8, ease: EASE }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: Math.min(index * 0.04, 0.25), duration: 0.45, ease: 'easeOut' }}
               onClick={() => setSelectedVideo(video)}
               className="text-left border border-black/15 bg-black/[0.015] group"
             >
@@ -296,13 +338,13 @@ const SidArt = () => {
       ) : (
         <div className="mt-8 space-y-4">
           {content.music.map((track, index) => {
-            const isActive = track._id === activeTrackId;
+            const isActive = track._id === activeId;
             return (
               <motion.div
                 key={track._id}
-                initial={{ opacity: 0, y: 18 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(index * 0.08, 0.5), duration: 0.8, ease: EASE }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: Math.min(index * 0.04, 0.25), duration: 0.45, ease: 'easeOut' }}
                 className="border border-black/15 bg-black/[0.015] p-4 sm:p-5"
               >
                 {isActive ? (
@@ -333,7 +375,7 @@ const SidArt = () => {
               </motion.div>
             );
           })}
-          {activeTrack && (
+          {content.music.length > 1 && (
             <p className="text-[9px] uppercase tracking-[0.4em] text-black/35 pt-2">
               Select any track to play it with its notes
             </p>
@@ -344,7 +386,17 @@ const SidArt = () => {
   );
 
   const renderContent = () => {
-    if (loading) return <LoadingState />;
+    if (loading) {
+      const labels = { blogs: 'Blogs', photographs: 'Photographs', videos: 'Videos', music: 'Music' };
+      return (
+        <SectionSkeleton
+          kind={active}
+          label={labels[active]}
+          index={currentIndex}
+          total={NAV_ITEMS.length}
+        />
+      );
+    }
     if (loadError) return <EmptyState message={loadError} />;
     if (active === 'blogs') return renderBlogs();
     if (active === 'photographs') return renderPhotographs();
@@ -355,9 +407,10 @@ const SidArt = () => {
   return (
     <MotionConfig reducedMotion="user">
       <motion.div
+        ref={scrollRef}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 1.2, ease: EASE }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
         className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden"
         style={{ backgroundColor: CREAM, color: INK, fontFamily: "'Bodoni Moda', 'Times New Roman', serif" }}
       >
@@ -380,7 +433,7 @@ const SidArt = () => {
                 type="button"
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1, duration: 0.9, ease: EASE }}
+                transition={{ delay: 0.4, duration: 0.5, ease: EASE }}
                 onClick={() => setContactOpen((open) => !open)}
                 className="text-[10px] sm:text-[11px] uppercase tracking-[0.3em] pb-1 border-b border-transparent hover:border-current transition-colors duration-500"
               >
@@ -427,7 +480,7 @@ const SidArt = () => {
                     key={`${char}-${index}`}
                     initial={{ y: '110%', opacity: 0 }}
                     animate={{ y: '0%', opacity: 1 }}
-                    transition={{ delay: 0.2 + index * 0.07, duration: 1.1, ease: EASE }}
+                    transition={{ delay: 0.08 + index * 0.04, duration: 0.7, ease: EASE }}
                     className="inline-block"
                   >
                     {char}
@@ -438,7 +491,7 @@ const SidArt = () => {
               <motion.p
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.9, duration: 1, ease: EASE }}
+                transition={{ delay: 0.35, duration: 0.6, ease: 'easeOut' }}
                 className="mt-4 text-[9px] sm:text-[10px] uppercase tracking-[0.5em] text-black/45"
               >
                 Art · Words · Sound
@@ -451,8 +504,8 @@ const SidArt = () => {
                     type="button"
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.05 + index * 0.1, duration: 0.9, ease: EASE }}
-                    onClick={() => setActive(item.key)}
+                    transition={{ delay: 0.3 + index * 0.05, duration: 0.5, ease: EASE }}
+                    onClick={() => handleSectionChange(item.key)}
                     className={`relative pb-2 text-[10px] sm:text-xs uppercase tracking-[0.25em] sm:tracking-[0.35em] transition-colors duration-500 ${
                       active === item.key ? 'text-black' : 'text-black/45 hover:text-black/80'
                     }`}
@@ -476,10 +529,10 @@ const SidArt = () => {
           <AnimatePresence mode="wait">
             <motion.section
               key={active}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -18 }}
-              transition={{ duration: 0.7, ease: EASE }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
             >
               {renderContent()}
             </motion.section>
