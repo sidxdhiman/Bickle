@@ -7,16 +7,56 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
+import { getSavedTheme } from '../utils/themeUtils';
 import { WhiteboardSkeleton } from '../components/Skeletons';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-const COLORS = ['#ffffff', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b'];
+// Palette without the "ink" swatch — ink is theme-aware (white in dark mode, black in light mode)
+const COLORS = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b'];
 const STROKE_WIDTHS = [2, 3, 5, 8];
 const FONT_SIZES = [16, 20, 28, 40];
 const LS_KEY = 'bickle_whiteboards';
+const BG_LS_KEY = 'bickle_whiteboard_bg';
+
+const inkFor = (theme) => (theme === 'light' ? '#0B0B0B' : '#FFFFFF');
+
+const BG_STYLES = [
+  { id: 'dots', label: 'Dots' },
+  { id: 'lines', label: 'Lines' },
+  { id: 'grid', label: 'Grid' },
+  { id: 'none', label: 'Plain' },
+];
+
+const readBgStyle = () => {
+  try {
+    const v = localStorage.getItem(BG_LS_KEY);
+    return BG_STYLES.some(s => s.id === v) ? v : 'dots';
+  } catch {
+    return 'dots';
+  }
+};
+
+// Mini previews for the background picker tiles
+const bgPreviewStyle = (id, theme) => {
+  const ink = theme === 'light' ? 'rgba(0,0,0,0.55)' : 'rgba(255,255,255,0.55)';
+  const bgc = theme === 'light' ? '#ffffff' : '#111113';
+  if (id === 'dots') {
+    return { backgroundColor: bgc, backgroundImage: `radial-gradient(${ink} 1px, transparent 1.2px)`, backgroundSize: '7px 7px' };
+  }
+  if (id === 'lines') {
+    return { backgroundColor: bgc, backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 6px, ${ink} 6px 7px)` };
+  }
+  if (id === 'grid') {
+    return {
+      backgroundColor: bgc,
+      backgroundImage: `repeating-linear-gradient(to bottom, transparent 0 6px, ${ink} 6px 7px), repeating-linear-gradient(to right, transparent 0 6px, ${ink} 6px 7px)`,
+    };
+  }
+  return { backgroundColor: bgc };
+};
 
 const uid = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -207,13 +247,16 @@ const Whiteboard = () => {
 
   const [tool, setTool] = useState('pen');
   const [smartShapes, setSmartShapes] = useState(true);
-  const [appearance, setAppearance] = useState({
-    stroke: '#ffffff',
+  const [theme, setTheme] = useState(getSavedTheme);
+  const inkColor = inkFor(theme);
+  const [bgStyle, setBgStyle] = useState(readBgStyle);
+  const [appearance, setAppearance] = useState(() => ({
+    stroke: inkFor(getSavedTheme()),
     fill: '#8b5cf6',
     fillEnabled: false,
     strokeWidth: 3,
     fontSize: 20,
-  });
+  }));
 
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [selectedId, setSelectedId] = useState(null);
@@ -223,6 +266,8 @@ const Whiteboard = () => {
   const [textEdit, setTextEdit] = useState(null);
   const [spaceDown, setSpaceDown] = useState(false);
   const [panning, setPanning] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [wipe, setWipe] = useState(null); // { x, span, p } — clear-board sweep
 
   const svgRef = useRef(null);
   const containerRef = useRef(null);
@@ -236,10 +281,37 @@ const Whiteboard = () => {
   const skipSaveRef = useRef(false);
   const saveTimer = useRef(null);
   const didFetchRef = useRef(false);
+  const wipeRafRef = useRef(null);
+  const prevInkRef = useRef(inkColor);
 
   useEffect(() => {
     boardsRef.current = boards;
   }, [boards]);
+
+  // Follow global theme changes (light/dark) while the whiteboard is open
+  useEffect(() => {
+    const onThemeChange = (event) => setTheme(event.detail || getSavedTheme());
+    window.addEventListener('bickle-theme-change', onThemeChange);
+    return () => window.removeEventListener('bickle-theme-change', onThemeChange);
+  }, []);
+
+  // If the pen is still on the previous theme's ink color, switch it to the new ink
+  useEffect(() => {
+    const prevInk = prevInkRef.current;
+    prevInkRef.current = inkColor;
+    setAppearance(prev => (prev.stroke === prevInk ? { ...prev, stroke: inkColor } : prev));
+  }, [inkColor]);
+
+  // Persist background style preference
+  useEffect(() => {
+    try {
+      localStorage.setItem(BG_LS_KEY, bgStyle);
+    } catch {
+      /* ignore */
+    }
+  }, [bgStyle]);
+
+  useEffect(() => () => cancelAnimationFrame(wipeRafRef.current), []);
 
   const loadLocalBoards = () => {
     try {
@@ -341,23 +413,63 @@ const Whiteboard = () => {
     setFuture([]);
   }, [elements]);
 
+  const cancelWipe = useCallback(() => {
+    cancelAnimationFrame(wipeRafRef.current);
+    setWipe(null);
+    setClearing(false);
+  }, []);
+
   const undo = useCallback(() => {
+    cancelWipe();
     if (!past.length) return;
     const prior = past[past.length - 1];
     setFuture(f => [elements, ...f]);
     setPast(p => p.slice(0, -1));
     setElements(prior);
     setSelectedId(null);
-  }, [past, elements]);
+  }, [past, elements, cancelWipe]);
 
   const redo = useCallback(() => {
+    cancelWipe();
     if (!future.length) return;
     const next = future[0];
     setPast(p => [...p, elements]);
     setFuture(f => f.slice(1));
     setElements(next);
     setSelectedId(null);
-  }, [future, elements]);
+  }, [future, elements, cancelWipe]);
+
+  // Clear board with an immersive "wiping the board clean" sweep.
+  // History is pushed first, so undo (Ctrl+Z) restores everything.
+  const clearBoard = () => {
+    if (!elements.length || clearing) return;
+    pushHistory();
+    setSelectedId(null);
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    const width = rect?.width || 1200;
+    const span = width / view.scale;
+    const startX = -view.x / view.scale;
+    const DURATION = 750;
+    const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+    const startedAt = performance.now();
+
+    setClearing(true);
+    setWipe({ x: startX, span, p: 0 });
+
+    const step = (now) => {
+      const t = Math.min(1, (now - startedAt) / DURATION);
+      setWipe({ x: startX, span, p: easeInOut(t) });
+      if (t < 1) {
+        wipeRafRef.current = requestAnimationFrame(step);
+      } else {
+        setElements([]);
+        setWipe(null);
+        setClearing(false);
+      }
+    };
+    wipeRafRef.current = requestAnimationFrame(step);
+  };
 
   const createBoard = async () => {
     const payload = { title: 'Untitled Board', elements: [] };
@@ -497,6 +609,7 @@ const Whiteboard = () => {
   };
 
   const handleCanvasPointerDown = (e) => {
+    if (clearing) return;
     if (textEditRef.current) {
       commitText();
       return;
@@ -884,9 +997,27 @@ const Whiteboard = () => {
             <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Appearance</h3>
 
             <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Board background</p>
+              <div className="grid grid-cols-4 gap-2">
+                {BG_STYLES.map(bg => (
+                  <button
+                    key={bg.id}
+                    onClick={() => setBgStyle(bg.id)}
+                    className={cn(
+                      'h-11 rounded-md border transition-all',
+                      bgStyle === bg.id ? 'border-primary ring-1 ring-primary' : 'border-border hover:border-foreground/40'
+                    )}
+                    style={bgPreviewStyle(bg.id, theme)}
+                    title={`${bg.label} background`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Stroke color</p>
               <div className="flex flex-wrap gap-2">
-                {COLORS.map(color => (
+                {[inkColor, ...COLORS].map(color => (
                   <button
                     key={color}
                     onClick={() => setAppearance(prev => ({ ...prev, stroke: color }))}
@@ -916,7 +1047,7 @@ const Whiteboard = () => {
                   </button>
                 </div>
                 <div className={cn('flex flex-wrap gap-2', !appearance.fillEnabled && 'opacity-40 pointer-events-none')}>
-                  {COLORS.map(color => (
+                  {[inkColor, ...COLORS].map(color => (
                     <button
                       key={color}
                       onClick={() => setAppearance(prev => ({ ...prev, fill: color, fillEnabled: true }))}
@@ -1020,16 +1151,10 @@ const Whiteboard = () => {
               <Redo2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => {
-                if (!elements.length) return;
-                if (window.confirm('Clear this board?')) {
-                  pushHistory();
-                  setElements([]);
-                  setSelectedId(null);
-                }
-              }}
-              title="Clear board"
-              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-destructive transition-colors"
+              onClick={clearBoard}
+              disabled={!elements.length || clearing}
+              title="Clear board (undo with Ctrl+Z)"
+              className="p-2 rounded-md text-muted-foreground hover:bg-accent hover:text-destructive transition-colors disabled:opacity-30 disabled:hover:bg-transparent"
             >
               <Trash2 className="w-4 h-4" />
             </button>
@@ -1038,7 +1163,7 @@ const Whiteboard = () => {
 
             <button
               onClick={() => setSmartShapes(s => !s)}
-              title="Snap freehand strokes to clean shapes"
+              title="Snap strokes into clean shapes (lines, rects, circles)"
               className={cn(
                 'flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-medium transition-colors',
                 smartShapes ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -1073,21 +1198,64 @@ const Whiteboard = () => {
               onContextMenu={(e) => e.preventDefault()}
             >
               <defs>
-                <pattern id="wb-dots" width="28" height="28" patternUnits="userSpaceOnUse">
-                  <circle cx="1.5" cy="1.5" r="1.2" fill="#ffffff" opacity="0.09" />
-                </pattern>
+                {bgStyle === 'dots' && (
+                  <pattern id="wb-bg" width="28" height="28" patternUnits="userSpaceOnUse">
+                    <circle cx="1.5" cy="1.5" r="1.2" fill={inkColor} opacity={theme === 'light' ? 0.18 : 0.09} />
+                  </pattern>
+                )}
+                {bgStyle === 'lines' && (
+                  <pattern id="wb-bg" width="28" height="28" patternUnits="userSpaceOnUse">
+                    <line x1="0" y1="27.5" x2="28" y2="27.5" stroke={inkColor} strokeWidth="1" opacity={theme === 'light' ? 0.14 : 0.08} />
+                  </pattern>
+                )}
+                {bgStyle === 'grid' && (
+                  <pattern id="wb-bg" width="28" height="28" patternUnits="userSpaceOnUse">
+                    <path d="M 28 0 L 0 0 L 0 28" fill="none" stroke={inkColor} strokeWidth="1" opacity={theme === 'light' ? 0.14 : 0.08} />
+                  </pattern>
+                )}
+                {wipe && (
+                  <>
+                    <clipPath id="wb-wipe-clip">
+                      <rect
+                        x={wipe.x + wipe.p * wipe.span}
+                        y={-6000}
+                        width={wipe.span + 2000}
+                        height={12000}
+                      />
+                    </clipPath>
+                    <linearGradient id="wb-wipe-band" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="hsl(var(--background))" stopOpacity="1" />
+                      <stop offset="55%" stopColor="hsl(var(--background))" stopOpacity="0.9" />
+                      <stop offset="100%" stopColor="hsl(var(--background))" stopOpacity="0" />
+                    </linearGradient>
+                  </>
+                )}
               </defs>
               <g transform={`translate(${view.x} ${view.y}) scale(${view.scale})`}>
-                <rect x={-6000} y={-6000} width={12000} height={12000} fill="url(#wb-dots)" style={{ pointerEvents: 'none' }} />
-                {elements.map(el => (
-                  <g
-                    key={el.id}
-                    onPointerDown={(e) => handleElementPointerDown(e, el)}
-                    onDoubleClick={(e) => handleElementDoubleClick(e, el)}
-                  >
-                    {renderShape(el)}
-                  </g>
-                ))}
+                {bgStyle !== 'none' && (
+                  <rect x={-6000} y={-6000} width={12000} height={12000} fill="url(#wb-bg)" style={{ pointerEvents: 'none' }} />
+                )}
+                <g clipPath={wipe ? 'url(#wb-wipe-clip)' : undefined} style={{ pointerEvents: clearing ? 'none' : undefined }}>
+                  {elements.map(el => (
+                    <g
+                      key={el.id}
+                      onPointerDown={(e) => handleElementPointerDown(e, el)}
+                      onDoubleClick={(e) => handleElementDoubleClick(e, el)}
+                    >
+                      {renderShape(el)}
+                    </g>
+                  ))}
+                </g>
+                {wipe && (() => {
+                  const edgeX = wipe.x + wipe.p * wipe.span;
+                  const bandW = 160 / view.scale;
+                  return (
+                    <g style={{ pointerEvents: 'none' }}>
+                      <rect x={edgeX} y={-6000} width={bandW} height={12000} fill="url(#wb-wipe-band)" />
+                      <rect x={edgeX} y={-6000} width={1.5 / view.scale} height={12000} fill="hsl(var(--foreground))" opacity="0.35" />
+                    </g>
+                  );
+                })()}
                 {draft && <g style={{ pointerEvents: 'none' }}>{renderShape(draft)}</g>}
                 {selBounds && (
                   <rect
