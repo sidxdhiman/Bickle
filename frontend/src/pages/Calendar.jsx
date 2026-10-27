@@ -13,6 +13,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { CalendarSkeleton } from '../components/Skeletons';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -747,15 +748,15 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
 const CalendarPage = () => {
   const [view, setView] = useState('month');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [tasks, setTasks] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [lists, setLists] = useState([]);
+  const [tasks, setTasks] = useState(() => peek('calendar')?.tasks ?? []);
+  const [events, setEvents] = useState(() => peek('calendar')?.events ?? []);
+  const [lists, setLists] = useState(() => peek('calendar')?.lists ?? []);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState('task');
   const today = new Date();
   const [selectedDate, setSelectedDate] = useState(today);
   const [editingEvent, setEditingEvent] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !peek('calendar'));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -766,12 +767,13 @@ const CalendarPage = () => {
           axios.get('/lists')
         ]);
 
-        setTasks(taskRes.data);
-        setEvents(eventRes.data.map((event) => ({
+        const converted = eventRes.data.map((event) => ({
           ...event,
           start: new Date(event.start),
           end: new Date(event.end)
-        })));
+        }));
+        setTasks(taskRes.data);
+        setEvents(converted);
         setLists(listRes.data);
       } catch (error) {
         console.error('Failed to load calendar data', error);
@@ -783,8 +785,12 @@ const CalendarPage = () => {
     fetchData();
   }, []);
 
+  // Keep the cache in sync with local edits so revisits are instant
+  useEffect(() => {
+    if (!loading) stash('calendar', { tasks, events, lists });
+  }, [loading, tasks, events, lists]);
+
   const refreshCalendar = async () => {
-    setLoading(true);
     try {
       const [taskRes, eventRes] = await Promise.all([
         axios.get('/tasks'),
@@ -798,8 +804,6 @@ const CalendarPage = () => {
       })));
     } catch (error) {
       console.error('Failed to refresh calendar data', error);
-    } finally {
-      setLoading(false);
     }
   };
 

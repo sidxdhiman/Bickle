@@ -9,6 +9,7 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { TasksSkeleton } from '../components/Skeletons';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -794,8 +795,8 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate, onDelete }) => {
 const TaskPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState('list');
-  const [tasks, setTasks] = useState([]);
-  const [lists, setLists] = useState([]);
+  const [tasks, setTasks] = useState(() => peek('tasks')?.tasks ?? []);
+  const [lists, setLists] = useState(() => peek('tasks')?.lists ?? []);
   const [selectedList, setSelectedList] = useState('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -806,7 +807,7 @@ const TaskPage = () => {
   const [editingList, setEditingList] = useState(null);
   const [contextMenuTask, setContextMenuTask] = useState(null);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !peek('tasks'));
   const [draggedTask, setDraggedTask] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // For mobile sidebar
 
@@ -841,6 +842,11 @@ const TaskPage = () => {
     };
     fetchData();
   }, []);
+
+  // Keep the cache in sync so revisiting the page is instant
+  useEffect(() => {
+    if (!loading) stash('tasks', { tasks, lists });
+  }, [loading, tasks, lists]);
 
   const filteredTasks = selectedList === 'all' ? tasks : tasks.filter(task => task.list === selectedList);
 

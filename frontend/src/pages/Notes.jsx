@@ -22,6 +22,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { NotesSkeleton } from '../components/Skeletons';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -164,10 +165,11 @@ const MoveNoteModal = ({ prompt, onMove, onCopy, onKeep }) => {
 };
 
 const NotesPage = () => {
-  const [notes, setNotes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeNote, setActiveNote] = useState(null);
-  const [categories, setCategories] = useState([]);
+  const cached = peek('notes');
+  const [notes, setNotes] = useState(() => cached?.notes ?? []);
+  const [loading, setLoading] = useState(() => !cached);
+  const [activeNote, setActiveNote] = useState(() => cached?.activeNote ?? null);
+  const [categories, setCategories] = useState(() => cached?.categories ?? []);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -232,9 +234,9 @@ const NotesPage = () => {
       try {
         const notesRes = await axios.get('/notes');
         setNotes(notesRes.data);
-        if (notesRes.data.length > 0) {
-          setActiveNote(notesRes.data[0]);
-        }
+        // Only pick the first note when nothing was restored from cache —
+        // never yank the user away from the note they are already viewing.
+        setActiveNote(prev => prev ?? (notesRes.data[0] || null));
 
         try {
           const categoriesRes = await axios.get('/notes/categories');
@@ -255,6 +257,11 @@ const NotesPage = () => {
 
     fetchData();
   }, []);
+
+  // Keep the cache in sync so revisiting the page is instant
+  useEffect(() => {
+    if (!loading) stash('notes', { notes, categories, activeNote });
+  }, [loading, notes, categories, activeNote]);
 
   const noteMatches = (note, cat = selectedCategory) => {
     const matchesCategory = cat === 'All' || note.category === cat;

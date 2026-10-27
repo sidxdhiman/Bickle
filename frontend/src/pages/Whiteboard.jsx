@@ -9,6 +9,7 @@ import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { getSavedTheme } from '../utils/themeUtils';
 import { WhiteboardSkeleton } from '../components/Skeletons';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -237,11 +238,13 @@ const TOOLS = [
 ];
 
 const Whiteboard = () => {
-  const [boards, setBoards] = useState([]);
-  const [activeBoardId, setActiveBoardId] = useState(null);
-  const [elements, setElements] = useState([]);
-  const [title, setTitle] = useState('Untitled Board');
-  const [loading, setLoading] = useState(true);
+  const cachedWb = peek('whiteboard');
+  const cachedBoard = cachedWb?.boards?.find(b => b._id === cachedWb.activeBoardId);
+  const [boards, setBoards] = useState(() => cachedWb?.boards ?? []);
+  const [activeBoardId, setActiveBoardId] = useState(() => cachedWb?.activeBoardId ?? null);
+  const [elements, setElements] = useState(() => cachedBoard?.elements ?? []);
+  const [title, setTitle] = useState(() => cachedBoard?.title ?? 'Untitled Board');
+  const [loading, setLoading] = useState(() => !cachedWb);
   const [offline, setOffline] = useState(false);
   const [saveStatus, setSaveStatus] = useState('idle');
 
@@ -358,6 +361,11 @@ const Whiteboard = () => {
     };
     fetchBoards();
   }, []);
+
+  // Keep the cache in sync so revisiting the board is instant
+  useEffect(() => {
+    if (!loading) stash('whiteboard', { boards, activeBoardId });
+  }, [loading, boards, activeBoardId]);
 
   // Load the selected board into the working canvas
   useEffect(() => {

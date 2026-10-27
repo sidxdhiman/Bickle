@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { peek, stash } from '../utils/pageCache';
 import {
   Upload, ArrowUpRight, FileText, Image as ImageIcon, Clapperboard,
   Music4, Trash2, Palette, Loader2, Plus,
@@ -16,8 +17,8 @@ function cn(...inputs) {
 const EMPTY = { blogs: [], photos: [], videos: [], music: [] };
 
 const Art = () => {
-  const [data, setData] = useState(EMPTY);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(() => peek('art') ?? EMPTY);
+  const [loading, setLoading] = useState(() => !peek('art'));
   const [error, setError] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const [busyKey, setBusyKey] = useState('');
@@ -47,6 +48,11 @@ const Art = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Keep the cache in sync so revisiting the page is instant
+  useEffect(() => {
+    if (!loading) stash('art', data);
+  }, [loading, data]);
 
   const handleDelete = async (type, id) => {
     if (!window.confirm('Delete this from your art site?')) return;

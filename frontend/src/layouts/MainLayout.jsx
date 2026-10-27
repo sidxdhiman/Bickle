@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import Dock from '../components/Dock';
 import Sidebar from '../components/Sidebar';
 import TopNav from '../components/TopNav';
@@ -11,6 +11,13 @@ const MainLayout = () => {
   const [settings] = useDockSettings();
   const [navMode] = useNavMode();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const mainRef = useRef(null);
+  const { pathname } = useLocation();
+
+  // Start each page at the top — like a fresh, polished navigation
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [pathname]);
 
   const dockMode = navMode !== 'sidebar';
 
@@ -41,6 +48,7 @@ const MainLayout = () => {
           onMenuClick={() => setIsSidebarOpen((open) => !open)}
         />
         <main
+          ref={mainRef}
           className={`flex-1 overflow-y-auto p-6 pt-4 scrollbar-hide ${spaceClass}`}
           style={
             dockMode

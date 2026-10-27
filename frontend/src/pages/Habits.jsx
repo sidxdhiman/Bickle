@@ -4,6 +4,7 @@ import { Plus, Check, X, Edit, Trash2, CalendarDays, BarChart, Sun } from 'lucid
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { TasksSkeleton } from '../components/Skeletons'; // Reusing task skeleton for loading state
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -113,8 +114,8 @@ const HabitModal = ({ isOpen, onClose, onSubmit, habit = null }) => {
 };
 
 const Habits = () => {
-  const [habits, setHabits] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [habits, setHabits] = useState(() => peek('habits')?.habits ?? []);
+  const [loading, setLoading] = useState(() => !peek('habits'));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
 
@@ -132,6 +133,11 @@ const Habits = () => {
   useEffect(() => {
     fetchHabits();
   }, []);
+
+  // Keep the cache in sync so revisiting the page is instant
+  useEffect(() => {
+    if (!loading) stash('habits', { habits });
+  }, [loading, habits]);
 
   const handleCreateHabit = async (habitData) => {
     try {

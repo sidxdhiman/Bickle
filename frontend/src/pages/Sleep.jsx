@@ -6,6 +6,7 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SleepSkeleton } from '../components/Skeletons';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -291,8 +292,8 @@ const AnalyzerModal = ({ isOpen, onClose }) => {
 };
 
 const Sleep = () => {
-  const [sleeps, setSleeps] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [sleeps, setSleeps] = useState(() => peek('sleep')?.sleeps ?? []);
+  const [loading, setLoading] = useState(() => !peek('sleep'));
   const [modalOpen, setModalOpen] = useState(false);
   const [analyzerOpen, setAnalyzerOpen] = useState(false);
   const [editingSleep, setEditingSleep] = useState(null);
@@ -305,6 +306,7 @@ const Sleep = () => {
     try {
       const res = await axios.get('/sleep');
       setSleeps(res.data);
+      stash('sleep', { sleeps: res.data });
     } catch (error) {
       console.error('Failed to fetch sleeps:', error);
     }

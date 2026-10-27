@@ -8,16 +8,19 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import AddTransactionModal from '../components/AddTransactionModal';
 import TransactionHistoryModal from '../components/TransactionHistoryModal';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+const monthKey = (d) => `money:${d.getFullYear()}-${d.getMonth() + 1}`;
+
 const Money = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [transactions, setTransactions] = useState([]);
-  const [totals, setTotals] = useState({ income: 0, expense: 0, net: 0, byCategory: {} });
-  const [loading, setLoading] = useState(true);
+  const [transactions, setTransactions] = useState(() => peek(monthKey(currentMonth))?.transactions ?? []);
+  const [totals, setTotals] = useState(() => peek(monthKey(currentMonth))?.totals ?? { income: 0, expense: 0, net: 0, byCategory: {} });
+  const [loading, setLoading] = useState(() => !peek(monthKey(currentMonth)));
   const [showAddModal, setShowAddModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState(null);
@@ -47,7 +50,15 @@ const Money = () => {
 
   const fetchMonthlyData = async () => {
     try {
-      setLoading(true);
+      const key = monthKey(currentMonth);
+      const cached = peek(key);
+      if (cached) {
+        // Show last-known month instantly while revalidating in the background
+        setTransactions(cached.transactions);
+        setTotals(cached.totals);
+      } else {
+        setLoading(true);
+      }
       const year = currentMonth.getFullYear();
       const month = currentMonth.getMonth() + 1;
 
@@ -57,6 +68,7 @@ const Money = () => {
 
       setTransactions(res.data.transactions);
       setTotals(res.data.totals);
+      stash(key, { transactions: res.data.transactions, totals: res.data.totals });
     } catch (error) {
       console.error('Error fetching transactions:', error);
     } finally {

@@ -5,24 +5,27 @@ import { CheckCircle, Clock, Calendar, FileText, TrendingUp, AlertCircle, Tally4
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { DashboardSkeleton } from '../components/Skeletons';
+import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
+const DASH_CACHE = 'dashboard';
+
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [stats, setStats] = useState({
+  const [stats, setStats] = useState(() => peek(DASH_CACHE)?.stats ?? {
     tasksDue: 0,
     tasksCompleted: 0,
     upcomingEvents: 0,
     notes: 0,
     overdueTasks: 0
   });
-  const [recentTasks, setRecentTasks] = useState([]);
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
-  const [habits, setHabits] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [recentTasks, setRecentTasks] = useState(() => peek(DASH_CACHE)?.recentTasks ?? []);
+  const [upcomingEvents, setUpcomingEvents] = useState(() => peek(DASH_CACHE)?.upcomingEvents ?? []);
+  const [habits, setHabits] = useState(() => peek(DASH_CACHE)?.habits ?? []);
+  const [loading, setLoading] = useState(() => !peek(DASH_CACHE));
 
   const fetchDashboardData = async () => {
     try {
@@ -95,6 +98,11 @@ const Dashboard = () => {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  // Keep the cache in sync with the latest loaded state (stale-while-revalidate)
+  useEffect(() => {
+    if (!loading) stash(DASH_CACHE, { stats, recentTasks, upcomingEvents, habits });
+  }, [loading, stats, recentTasks, upcomingEvents, habits]);
 
   const handleCompleteHabit = async (habitId) => {
     try {
