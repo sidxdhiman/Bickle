@@ -1,5 +1,36 @@
 const Habit = require('../models/Habit');
 
+// Normalize any date to its local midnight timestamp (day-level identity)
+const dayKey = (d) => {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+};
+
+// Recompute a streak from raw completion dates.
+// Counts consecutive days backwards from today (or yesterday if today isn't
+// done yet, so an in-progress day doesn't zero out a live streak).
+const computeStreak = (completedDates) => {
+  const days = new Set((completedDates || []).map(dayKey));
+  if (days.size === 0) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let cursor = new Date(today);
+  if (!days.has(cursor.getTime())) {
+    cursor.setDate(cursor.getDate() - 1);
+    if (!days.has(cursor.getTime())) return 0;
+  }
+
+  let streak = 0;
+  while (days.has(cursor.getTime())) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+};
+
 // @desc    Get all habits for a user
 // @route   GET /api/habits
 // @access  Private
@@ -151,28 +182,70 @@ exports.completeHabit = async (req, res) => {
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const lastCompletedDate = habit.lastCompleted ? new Date(habit.lastCompleted) : null;
-    if (lastCompletedDate) lastCompletedDate.setHours(0, 0, 0, 0);
+    const alreadyCompletedToday = (habit.completedDates || []).some((d) => {
+      const ts = new Date(d).getTime();
+      return ts >= today.getTime() && ts < tomorrow.getTime();
+    });
 
-    if (lastCompletedDate && lastCompletedDate.getTime() === today.getTime()) {
+    if (alreadyCompletedToday) {
       return res.status(400).json({ msg: 'Habit already completed today' });
     }
 
-    // Check if yesterday was completed to maintain streak
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
+    habit.completedDates.push(Date.now());
+    habit.lastCompleted = Date.now();
+    habit.streak = computeStreak(habit.completedDates);
 
-    let newStreak = habit.streak;
-    if (lastCompletedDate && lastCompletedDate.getTime() === yesterday.getTime()) {
-      newStreak++;
-    } else if (!lastCompletedDate || lastCompletedDate.getTime() < yesterday.getTime()) {
-      newStreak = 1; // Reset streak if not completed yesterday
+    await habit.save();
+    res.json(habit);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send('Server Error');
+  }
+};
+
+// @desc    Undo a habit's completion for today
+// @route   PUT /api/habits/:id/uncomplete
+// @access  Private
+exports.uncompleteHabit = async (req, res) => {
+  try {
+    const habit = await Habit.findById(req.params.id);
+
+    if (!habit) {
+      return res.status(404).json({ msg: 'Habit not found' });
     }
 
-    habit.lastCompleted = Date.now();
-    habit.streak = newStreak;
-    habit.completedDates.push(Date.now());
+    // Ensure user owns habit
+    if (habit.userId.toString() !== req.user.id) {
+      return res.status(401).json({ msg: 'Not authorized' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const remaining = (habit.completedDates || []).filter((d) => {
+      const ts = new Date(d).getTime();
+      return ts < today.getTime() || ts >= tomorrow.getTime();
+    });
+
+    if (remaining.length === (habit.completedDates || []).length) {
+      return res.status(400).json({ msg: 'Habit not completed today' });
+    }
+
+    habit.completedDates = remaining;
+    habit.streak = computeStreak(remaining);
+
+    // Point lastCompleted at the most recent remaining day (or clear it)
+    if (remaining.length > 0) {
+      const latest = remaining.reduce((max, d) => (new Date(d) > new Date(max) ? d : max), remaining[0]);
+      habit.lastCompleted = latest;
+    } else {
+      habit.lastCompleted = null;
+    }
 
     await habit.save();
     res.json(habit);

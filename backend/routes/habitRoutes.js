@@ -21,4 +21,7 @@ router.delete('/:id', protect, habitController.deleteHabit);
 // Mark a habit as completed for today
 router.put('/:id/complete', protect, habitController.completeHabit);
 
+// Undo a habit's completion for today
+router.put('/:id/uncomplete', protect, habitController.uncompleteHabit);
+
 module.exports = router;

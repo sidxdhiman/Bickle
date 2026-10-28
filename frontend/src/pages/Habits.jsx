@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import { Plus, Check, X, Edit, Trash2, CalendarDays, BarChart, Sun } from 'lucide-react';
+import { Plus, Check, X, Edit, Trash2, CalendarDays, BarChart3, Flame, ListChecks, PartyPopper } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { TasksSkeleton } from '../components/Skeletons'; // Reusing task skeleton for loading state
+import { HabitHeatmap, MiniStrip, isCompletedOn } from '../components/HabitHeatmap';
 import { peek, stash } from '../utils/pageCache';
 
 function cn(...inputs) {
@@ -118,6 +119,13 @@ const Habits = () => {
   const [loading, setLoading] = useState(() => !peek('habits'));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
+  const [togglingId, setTogglingId] = useState(null);
+
+  const today = useMemo(() => {
+    const t = new Date();
+    t.setHours(0, 0, 0, 0);
+    return t;
+  }, []);
 
   const fetchHabits = async () => {
     try {
@@ -169,32 +177,41 @@ const Habits = () => {
     }
   };
 
-  const handleCompleteHabit = async (habit) => {
+  // Toggle: mark done for today, or undo if already done today
+  const handleToggleHabit = async (habit) => {
+    const completed = isCompletedOn(habit.completedDates, today);
+    setTogglingId(habit._id);
     try {
-      const res = await axios.put(`/habits/${habit._id}/complete`);
+      const res = completed
+        ? await axios.put(`/habits/${habit._id}/uncomplete`)
+        : await axios.put(`/habits/${habit._id}/complete`);
       setHabits(prev => prev.map(h => h._id === habit._id ? res.data : h));
     } catch (error) {
-      console.error('Error completing habit:', error.response?.data?.msg || error.message);
-      alert(error.response?.data?.msg || 'Failed to complete habit');
+      console.error('Error updating habit:', error.response?.data?.msg || error.message);
+      alert(error.response?.data?.msg || 'Failed to update habit');
+    } finally {
+      setTogglingId(null);
     }
   };
 
-  const checkIfCompletedToday = (completedDates) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return completedDates.some(dateString => {
-      const date = new Date(dateString);
-      date.setHours(0, 0, 0, 0);
-      return date.getTime() === today.getTime();
-    });
-  };
+  const doneToday = habits.filter(h => isCompletedOn(h.completedDates, today)).length;
+  const bestStreak = habits.reduce((max, h) => Math.max(max, h.streak || 0), 0);
 
   if (loading) return <TasksSkeleton />;
 
   return (
     <div className="flex flex-col h-full max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 gap-6">
-      <header className="flex items-center justify-between pb-4 border-b border-border">
-        <h1 className="text-2xl font-bold tracking-tight">Habit Tracker ({habits.length})</h1>
+      <header className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Habit Tracker</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {habits.length === 0
+              ? 'Build better routines, one day at a time.'
+              : doneToday === habits.length
+                ? "You're all caught up for today!"
+                : `${doneToday} of ${habits.length} done today`}
+          </p>
+        </div>
         <button
           onClick={() => {
             setEditingHabit(null);
@@ -207,72 +224,127 @@ const Habits = () => {
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto pr-2 -mr-2">
-        {habits.length > 0 ? (
-          <div className="space-y-4">
-            {habits.map(habit => {
-              const completedToday = checkIfCompletedToday(habit.completedDates);
-              return (
-                <div
-                  key={habit._id}
-                  className="bg-secondary border border-border rounded-md p-4 flex items-center justify-between gap-4"
-                >
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg flex items-center gap-2">
-                      {habit.name}
-                      {habit.streak > 0 && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500 flex items-center gap-1">
-                          <Sun className="w-3 h-3" /> {habit.streak} Day Streak
-                        </span>
-                      )}
-                    </h3>
-                    {habit.description && <p className="text-sm text-muted-foreground mt-1">{habit.description}</p>}
-                    <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                      <CalendarDays className="w-3 h-3" /> {habit.frequency.charAt(0).toUpperCase() + habit.frequency.slice(1)}
-                      {habit.lastCompleted && ` - Last completed: ${new Date(habit.lastCompleted).toLocaleDateString()}`}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleCompleteHabit(habit)}
-                      disabled={completedToday}
-                      className={cn(
-                        "p-2 rounded-full transition-colors",
-                        completedToday
-                          ? "bg-green-500 text-white cursor-not-allowed opacity-70"
-                          : "bg-primary text-primary-foreground hover:bg-primary/90"
-                      )}
-                      title={completedToday ? "Completed today" : "Mark as complete today"}
-                    >
-                      <Check className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingHabit(habit);
-                        setIsModalOpen(true);
-                      }}
-                      className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
-                      title="Edit habit"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteHabit(habit._id)}
-                      className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors"
-                      title="Delete habit"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+      {habits.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="p-4 rounded-2xl bg-secondary border border-border">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-muted-foreground">Done Today</p>
+              <ListChecks className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <p className="text-2xl font-bold">
+              {doneToday}
+              <span className="text-base text-muted-foreground font-medium">/{habits.length}</span>
+            </p>
           </div>
+          <div className="p-4 rounded-2xl bg-secondary border border-border">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-muted-foreground">Best Streak</p>
+              <Flame className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <p className="text-2xl font-bold">
+              {bestStreak}
+              <span className="text-base text-muted-foreground font-medium"> days</span>
+            </p>
+          </div>
+          <div className="p-4 rounded-2xl bg-secondary border border-border col-span-2 lg:col-span-1">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-muted-foreground">Active Habits</p>
+              <CalendarDays className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <p className="text-2xl font-bold">{habits.length}</p>
+          </div>
+        </div>
+      )}
+
+      <div className="flex-1 overflow-y-auto pr-2 -mr-2 space-y-6">
+        {habits.length > 0 ? (
+          <>
+            <section>
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Today's Habits
+              </h2>
+              <div className="space-y-3">
+                {habits.map(habit => {
+                  const completedToday = isCompletedOn(habit.completedDates, today);
+                  return (
+                    <div
+                      key={habit._id}
+                      className={cn(
+                        'bg-secondary border rounded-xl p-4 flex items-start sm:items-center gap-3 sm:gap-4 transition-colors',
+                        completedToday ? 'border-green-500/30' : 'border-border'
+                      )}
+                    >
+                      <button
+                        onClick={() => handleToggleHabit(habit)}
+                        disabled={togglingId === habit._id}
+                        className={cn(
+                          'w-8 h-8 rounded-full flex items-center justify-center transition-all flex-shrink-0 border-2 mt-0.5 sm:mt-0',
+                          completedToday
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-muted-foreground/40 hover:border-primary hover:bg-primary/10 text-transparent hover:text-primary'
+                        )}
+                        title={completedToday ? "Undo today's completion" : 'Mark as done today'}
+                      >
+                        <Check className="w-4 h-4" strokeWidth={3} />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <h3 className={cn('font-semibold', completedToday && 'text-muted-foreground')}>
+                          {habit.name}
+                        </h3>
+                        {habit.description && (
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{habit.description}</p>
+                        )}
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          {habit.streak > 0 && (
+                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 flex items-center gap-1">
+                              <Flame className="w-3 h-3" /> {habit.streak} day streak
+                            </span>
+                          )}
+                          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                            <CalendarDays className="w-3 h-3" />
+                            {habit.frequency.charAt(0).toUpperCase() + habit.frequency.slice(1)}
+                          </span>
+                          <MiniStrip completedDates={habit.completedDates} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0 self-center">
+                        <button
+                          onClick={() => {
+                            setEditingHabit(habit);
+                            setIsModalOpen(true);
+                          }}
+                          className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors"
+                          title="Edit habit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteHabit(habit._id)}
+                          className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors"
+                          title="Delete habit"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {doneToday === habits.length && (
+                <div className="mt-3 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-500 text-sm flex items-center gap-2">
+                  <PartyPopper className="w-4 h-4 flex-shrink-0" />
+                  All habits completed today. Great job!
+                </div>
+              )}
+            </section>
+
+            <HabitHeatmap habits={habits} />
+          </>
         ) : (
           <div className="text-center py-12 text-muted-foreground">
-            <BarChart className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-lg">No habits found.</p>
-            <p className="text-sm">Start tracking a new habit to see your progress!</p>
+            <BarChart3 className="w-16 h-16 mx-auto mb-4 opacity-50" />
+            <p className="text-lg">No habits yet.</p>
+            <p className="text-sm">Create your first habit to start tracking your progress.</p>
           </div>
         )}
       </div>
