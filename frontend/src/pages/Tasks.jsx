@@ -10,6 +10,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { TasksSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType, upsertSearchDoc, removeSearchDoc } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -820,9 +821,11 @@ const TaskPage = () => {
           currentLists = [newList.data];
         }
         setLists(currentLists);
+        syncSearchType('list', currentLists).catch(() => {});
 
         const currentTasks = (await axios.get('/tasks')).data;
         setTasks(currentTasks);
+        syncSearchType('task', currentTasks).catch(() => {});
 
         // If a taskId is present in the URL, open that task in the detail modal
         const taskId = searchParams.get('taskId');
@@ -854,6 +857,7 @@ const TaskPage = () => {
     try {
       const res = await axios.post('/tasks', taskData);
       setTasks(prev => [res.data, ...prev]);
+      upsertSearchDoc('task', res.data).catch(() => {});
       setIsModalOpen(false);
     } catch (error) {
       console.error('Error creating task', error);
@@ -864,6 +868,7 @@ const TaskPage = () => {
     try {
       const res = await axios.put(`/tasks/${editingTask._id}`, taskData);
       setTasks(prev => prev.map(task => task._id === editingTask._id ? res.data : task));
+      upsertSearchDoc('task', res.data).catch(() => {});
       setIsModalOpen(false);
       setEditingTask(null);
     } catch (error) {
@@ -879,10 +884,12 @@ const TaskPage = () => {
   const handleTaskUpdate = (updatedTask) => {
     setTasks(prev => prev.map(task => task._id === updatedTask._id ? updatedTask : task));
     setSelectedTask(updatedTask);
+    upsertSearchDoc('task', updatedTask).catch(() => {});
   };
 
   const handleTaskDelete = (taskId) => {
     setTasks(prev => prev.filter(task => task._id !== taskId));
+    removeSearchDoc('task', taskId).catch(() => {});
   };
 
   const handleToggleComplete = async (task) => {
@@ -949,6 +956,10 @@ const TaskPage = () => {
     await axios.delete(`/lists/${listId}`);
     setLists(prev => prev.filter(l => l._id !== listId));
     setTasks(prev => prev.filter(task => task.list !== listId));
+    removeSearchDoc('list', listId).catch(() => {});
+    tasks
+      .filter(task => task.list === listId)
+      .forEach(task => removeSearchDoc('task', task._id).catch(() => {}));
     if (selectedList === listId) {
       setSelectedList('all');
     }
@@ -970,6 +981,7 @@ const TaskPage = () => {
       statuses: defaultStatusOptions,
     });
     setLists(prev => [...prev, res.data]);
+    upsertSearchDoc('list', res.data).catch(() => {});
     if (select) setSelectedList(res.data._id);
     return res.data;
   };
@@ -978,6 +990,7 @@ const TaskPage = () => {
     setEditingList(null);
     const updatedLists = await axios.get('/lists');
     setLists(updatedLists.data);
+    syncSearchType('list', updatedLists.data).catch(() => {});
   };
 
   const getDefaultStatusForList = (listId) => {
@@ -1350,8 +1363,14 @@ const TaskPage = () => {
         onUpdate={() => {
           // Re-fetch lists and tasks to ensure data consistency after list update
           // This is a simplified approach, a more robust solution would update local state intelligently
-          axios.get('/lists').then(res => setLists(res.data));
-          axios.get('/tasks').then(res => setTasks(res.data));
+          axios.get('/lists').then(res => {
+            setLists(res.data);
+            syncSearchType('list', res.data).catch(() => {});
+          });
+          axios.get('/tasks').then(res => {
+            setTasks(res.data);
+            syncSearchType('task', res.data).catch(() => {});
+          });
         }}
       />
     </div>

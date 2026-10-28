@@ -6,6 +6,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
+import { upsertSearchDoc } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -106,7 +107,8 @@ const Dashboard = () => {
 
   const handleCompleteHabit = async (habitId) => {
     try {
-      await axios.put(`/habits/${habitId}/complete`);
+      const res = await axios.put(`/habits/${habitId}/complete`);
+      upsertSearchDoc('habit', res.data).catch(() => {});
       fetchDashboardData();
     } catch (error) {
       console.error('Failed to complete habit:', error);

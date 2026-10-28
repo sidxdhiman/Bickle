@@ -24,6 +24,7 @@ import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { NotesSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType, upsertSearchDoc, removeSearchDoc } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -236,6 +237,7 @@ const NotesPage = () => {
       try {
         const notesRes = await axios.get('/notes');
         setNotes(notesRes.data);
+        syncSearchType('note', notesRes.data).catch(() => {});
         // Only pick the first note when nothing was restored from cache —
         // never yank the user away from the note they are already viewing.
         setActiveNote(prev => prev ?? (notesRes.data[0] || null));
@@ -396,6 +398,7 @@ const NotesPage = () => {
       const response = await axios.post('/notes', newNote);
       setNotes([response.data, ...notes]);
       setActiveNote(response.data);
+      upsertSearchDoc('note', response.data).catch(() => {});
     } catch (error) {
       console.error('Failed to create note:', error);
       alert('Failed to create note');
@@ -407,6 +410,7 @@ const NotesPage = () => {
     try {
       await axios.put(`/notes/${activeNote._id}`, activeNote);
       setNotes(notes.map(n => n._id === activeNote._id ? activeNote : n));
+      upsertSearchDoc('note', activeNote).catch(() => {});
     } catch (error) {
       console.error('Failed to save note:', error);
       alert('Failed to save note');
@@ -436,6 +440,7 @@ const NotesPage = () => {
     try {
       const res = await axios.put(`/notes/${note._id}`, note);
       setNotes(prev => prev.map(n => n._id === note._id ? res.data : n));
+      upsertSearchDoc('note', res.data).catch(() => {});
       setActiveNote(prev => {
         if (!prev || prev._id !== note._id) return prev;
         const sameContent = prev.title === res.data.title && prev.content === res.data.content && prev.category === res.data.category && prev.isPinned === res.data.isPinned;
@@ -466,6 +471,7 @@ const NotesPage = () => {
     try {
       await axios.delete(`/notes/${note._id}`);
       setNotes(prev => prev.filter(n => n._id !== note._id));
+      removeSearchDoc('note', note._id).catch(() => {});
       setActiveNote(prev => {
         if (!prev || prev._id !== note._id) return prev;
         const next = notes.find(n => n._id !== note._id && noteMatches(n));

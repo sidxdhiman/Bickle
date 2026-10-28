@@ -7,6 +7,7 @@ import { twMerge } from 'tailwind-merge';
 import { TasksSkeleton } from '../components/Skeletons'; // Reusing task skeleton for loading state
 import { HabitHeatmap, MiniStrip, isCompletedOn } from '../components/HabitHeatmap';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType, upsertSearchDoc, removeSearchDoc } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -134,6 +135,7 @@ const Habits = () => {
     try {
       const res = await axios.get('/habits');
       setHabits(res.data);
+      syncSearchType('habit', res.data).catch(() => {});
     } catch (error) {
       console.error('Error fetching habits:', error);
     } finally {
@@ -173,6 +175,7 @@ const Habits = () => {
     try {
       const res = await axios.post('/habits', habitData);
       setHabits(prev => [res.data, ...prev]);
+      upsertSearchDoc('habit', res.data).catch(() => {});
     } catch (error) {
       console.error('Error creating habit:', error);
     }
@@ -182,6 +185,7 @@ const Habits = () => {
     try {
       const res = await axios.put(`/habits/${editingHabit._id}`, habitData);
       setHabits(prev => prev.map(habit => habit._id === editingHabit._id ? res.data : habit));
+      upsertSearchDoc('habit', res.data).catch(() => {});
       setEditingHabit(null);
     } catch (error) {
       console.error('Error updating habit:', error);
@@ -193,6 +197,7 @@ const Habits = () => {
       try {
         await axios.delete(`/habits/${id}`);
         setHabits(prev => prev.filter(habit => habit._id !== id));
+        removeSearchDoc('habit', id).catch(() => {});
       } catch (error) {
         console.error('Error deleting habit:', error);
       }
@@ -208,6 +213,7 @@ const Habits = () => {
         ? await axios.put(`/habits/${habit._id}/uncomplete`)
         : await axios.put(`/habits/${habit._id}/complete`);
       setHabits(prev => prev.map(h => h._id === habit._id ? res.data : h));
+      upsertSearchDoc('habit', res.data).catch(() => {});
     } catch (error) {
       console.error('Error updating habit:', error.response?.data?.msg || error.message);
       alert(error.response?.data?.msg || 'Failed to update habit');

@@ -9,6 +9,7 @@ import { twMerge } from 'tailwind-merge';
 import AddTransactionModal from '../components/AddTransactionModal';
 import TransactionHistoryModal from '../components/TransactionHistoryModal';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType, removeSearchDoc } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -69,6 +70,8 @@ const Money = () => {
       setTransactions(res.data.transactions);
       setTotals(res.data.totals);
       stash(key, { transactions: res.data.transactions, totals: res.data.totals });
+      // Month-scoped fetch: upsert only so other months stay indexed
+      syncSearchType('transaction', res.data.transactions, { replace: false }).catch(() => {});
     } catch (error) {
       console.error('Error fetching transactions:', error);
     } finally {
@@ -125,6 +128,7 @@ const Money = () => {
     if (window.confirm('Are you sure you want to delete this transaction?')) {
       try {
         await axios.delete(`/money/transactions/${id}`);
+        removeSearchDoc('transaction', id).catch(() => {});
         await fetchMonthlyData();
       } catch (error) {
         console.error('Error deleting transaction:', error);

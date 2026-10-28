@@ -6,6 +6,7 @@ import axios from 'axios';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { GRANTABLE_PAGES } from '../config/pages';
+import { clearSearchIndex } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -116,6 +117,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
     localStorage.removeItem('profilePic');
+    clearSearchIndex().catch(() => {});
     onClose();
     navigate('/');
     setTimeout(() => window.location.reload(), 50);

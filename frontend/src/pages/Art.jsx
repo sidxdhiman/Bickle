@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType } from '../utils/searchIndex';
 import {
   Upload, ArrowUpRight, FileText, Image as ImageIcon, Clapperboard,
   Music4, Trash2, Palette, Loader2, Plus,
@@ -37,6 +38,13 @@ const Art = () => {
         videos: videos.data,
         music: music.data,
       });
+      // Keep the global search index fresh (covers create + delete refetches)
+      Promise.all([
+        syncSearchType('blog', blogs.data),
+        syncSearchType('photo', photos.data),
+        syncSearchType('video', videos.data),
+        syncSearchType('music', music.data),
+      ]).catch(() => {});
       setError('');
     } catch (err) {
       setError(err.response?.data?.message || 'Your published work could not be loaded.');

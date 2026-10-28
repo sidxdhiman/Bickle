@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
 import { ensureBackendToken } from './utils/backendAuth';
+import { clearSearchIndex } from './utils/searchIndex';
 import { AccessProvider, useAccess } from './context/AccessContext';
 import { ALL_PAGE_KEYS, PAGES } from './config/pages';
 import GuestWelcomeModal from './components/GuestWelcomeModal';
@@ -81,6 +82,7 @@ const App = () => {
       }
     }
     localStorage.removeItem(GUEST_STORAGE_KEY);
+    clearSearchIndex().catch(() => {});
     window.location.href = '/';
   }, []);
 

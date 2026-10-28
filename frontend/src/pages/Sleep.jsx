@@ -7,6 +7,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SleepSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -307,6 +308,8 @@ const Sleep = () => {
       const res = await axios.get('/sleep');
       setSleeps(res.data);
       stash('sleep', { sleeps: res.data });
+      // Called after every create/update/delete too — keeps index fresh
+      syncSearchType('sleep', res.data).catch(() => {});
     } catch (error) {
       console.error('Failed to fetch sleeps:', error);
     }

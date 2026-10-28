@@ -6,6 +6,7 @@ import TopNav from '../components/TopNav';
 import BackgroundLayer from '../components/BackgroundLayer';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useNavMode } from '../hooks/useNavMode';
+import { reindexAll } from '../utils/searchIndex';
 
 const MainLayout = () => {
   const [settings] = useDockSettings();
@@ -18,6 +19,12 @@ const MainLayout = () => {
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [pathname]);
+
+  // Build/refresh the IndexedDB search index on app boot so the global
+  // search finds everything even before a page is visited. (TTL-guarded.)
+  useEffect(() => {
+    reindexAll().catch(() => {});
+  }, []);
 
   const dockMode = navMode !== 'sidebar';
 

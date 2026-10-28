@@ -10,6 +10,7 @@ import axios from 'axios';
 import { getSavedTheme } from '../utils/themeUtils';
 import { WhiteboardSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType, upsertSearchDoc, removeSearchDoc } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -345,6 +346,7 @@ const Whiteboard = () => {
         }
         setBoards(data);
         setActiveBoardId(data[0]._id);
+        syncSearchType('board', data).catch(() => {});
       } catch (err) {
         offlineRef.current = true;
         setOffline(true);
@@ -394,6 +396,7 @@ const Whiteboard = () => {
     }
     try {
       await axios.put(`/whiteboards/${id}`, { title: nextTitle, elements: nextElements });
+      upsertSearchDoc('board', { _id: id, title: nextTitle }).catch(() => {});
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 1200);
     } catch {
@@ -492,6 +495,7 @@ const Whiteboard = () => {
         const res = await axios.post('/whiteboards', payload);
         setBoards(prev => [res.data, ...prev]);
         setActiveBoardId(res.data._id);
+        upsertSearchDoc('board', res.data).catch(() => {});
       } catch (err) {
         console.error('Failed to create board:', err);
       }
@@ -516,6 +520,7 @@ const Whiteboard = () => {
       saveLocalBoards(remaining);
     }
     setBoards(remaining);
+    removeSearchDoc('board', id).catch(() => {});
     if (activeBoardId === id) setActiveBoardId(remaining[0]._id);
   };
 

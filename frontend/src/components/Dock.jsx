@@ -5,6 +5,7 @@ import { PAGES } from '../config/pages';
 import { useAccess } from '../context/AccessContext';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useBackground } from '../hooks/useBackground';
+import { clearSearchIndex } from '../utils/searchIndex';
 
 const SIGMA = 0.85;
 
@@ -134,6 +135,7 @@ const Dock = () => {
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
     localStorage.removeItem('profilePic');
+    clearSearchIndex().catch(() => {});
     navigate('/');
     setTimeout(() => window.location.reload(), 50);
   };

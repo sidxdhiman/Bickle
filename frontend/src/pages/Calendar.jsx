@@ -14,6 +14,7 @@ import { twMerge } from 'tailwind-merge';
 import axios from 'axios';
 import { CalendarSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
+import { syncSearchType } from '../utils/searchIndex';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -775,6 +776,9 @@ const CalendarPage = () => {
         setTasks(taskRes.data);
         setEvents(converted);
         setLists(listRes.data);
+        syncSearchType('event', eventRes.data).catch(() => {});
+        syncSearchType('task', taskRes.data).catch(() => {});
+        syncSearchType('list', listRes.data).catch(() => {});
       } catch (error) {
         console.error('Failed to load calendar data', error);
       } finally {
@@ -802,6 +806,9 @@ const CalendarPage = () => {
         start: new Date(event.start),
         end: new Date(event.end)
       })));
+      // Every event mutation ends here, so the search index stays fresh
+      syncSearchType('event', eventRes.data).catch(() => {});
+      syncSearchType('task', taskRes.data).catch(() => {});
     } catch (error) {
       console.error('Failed to refresh calendar data', error);
     }
