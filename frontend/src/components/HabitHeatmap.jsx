@@ -202,7 +202,7 @@ export const HabitHeatmap = ({ habits }) => {
 
   const numWeeks = Math.ceil(days.length / 7);
   // Grid stretches columns to fill the card; below this it scrolls sideways
-  const gridMinWidth = `calc(2.5rem + ${numWeeks} * 16px + ${numWeeks} * 6px)`;
+  const gridMinWidth = `calc(2.5rem + ${numWeeks} * 16px + ${numWeeks} * 8px)`;
 
   return (
     <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border">
@@ -224,7 +224,7 @@ export const HabitHeatmap = ({ habits }) => {
         <div className="overflow-x-auto pb-1 -mb-1">
           {/* Month labels — spacer + equal spans mirror the grid columns */}
           <div
-            className="flex gap-1 sm:gap-1.5 mb-1 text-[10px] sm:text-xs text-muted-foreground"
+            className="flex gap-1.5 sm:gap-2 mb-1.5 text-[10px] sm:text-xs text-muted-foreground"
             style={{ minWidth: gridMinWidth }}
           >
             <span className="w-10 shrink-0" aria-hidden="true" />
@@ -237,7 +237,7 @@ export const HabitHeatmap = ({ habits }) => {
 
           {/* Grid: fixed weekday column + equal flexible day columns */}
           <div
-            className="grid gap-1 sm:gap-1.5 w-full"
+            className="grid gap-1.5 sm:gap-2 w-full"
             style={{
               gridTemplateColumns: `2.5rem repeat(${numWeeks}, minmax(16px, 1fr))`,
               minWidth: gridMinWidth,
@@ -251,7 +251,12 @@ export const HabitHeatmap = ({ habits }) => {
                 {Array.from({ length: numWeeks }, (_, week) => {
                   const day = days[week * 7 + row];
                   if (!day || day.future) {
-                    return <span key={week} className="w-full aspect-square rounded-[3px]" />;
+                    return (
+                      <span
+                        key={week}
+                        className="w-full aspect-square rounded-[3px] border border-foreground/5"
+                      />
+                    );
                   }
                   return (
                     <button
@@ -260,7 +265,7 @@ export const HabitHeatmap = ({ habits }) => {
                       onClick={() => setSelectedDay(day)}
                       aria-label={tooltipFor(day)}
                       className={cn(
-                        'w-full aspect-square rounded-[3px] transition-transform hover:scale-110 hover:ring-2 hover:ring-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer',
+                        'w-full aspect-square rounded-[3px] border border-foreground/15 transition-transform hover:scale-110 hover:ring-2 hover:ring-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer',
                         levelClass(day.count)
                       )}
                       title={tooltipFor(day)}
@@ -275,11 +280,11 @@ export const HabitHeatmap = ({ habits }) => {
         {/* Legend inside the panel */}
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/60 text-[10px] sm:text-xs text-muted-foreground">
           <span>Less</span>
-          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-muted" />
-          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/25" />
-          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/45" />
-          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/65" />
-          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/90" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-muted border border-foreground/15" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/25 border border-foreground/15" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/45 border border-foreground/15" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/65 border border-foreground/15" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/90 border border-foreground/15" />
           <span>More</span>
         </div>
       </div>
