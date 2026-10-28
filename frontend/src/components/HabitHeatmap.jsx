@@ -7,7 +7,8 @@ function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-const WEEKS = 26;
+// Wide grid: 44 weeks of large cells spans the full card width on desktop
+const WEEKS = 44;
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export const toDayKey = (d) => {
@@ -209,14 +210,14 @@ export const HabitHeatmap = ({ habits }) => {
           {totalCompletions} completion{totalCompletions === 1 ? '' : 's'} in the last {WEEKS} weeks
         </p>
       </div>
-      <p className="text-xs text-muted-foreground mb-4">
+      <p className="text-xs text-muted-foreground mb-5">
         Each square is a day, shaded by how many habits you finished. Click a day for details.
       </p>
 
-      <div className="flex gap-2">
-        <div className="flex flex-col gap-[3px] pt-[20px] text-[10px] text-muted-foreground shrink-0">
+      <div className="flex gap-2 sm:gap-3">
+        <div className="flex flex-col gap-1 sm:gap-1.5 pt-5 sm:pt-6 text-[10px] sm:text-xs text-muted-foreground shrink-0">
           {['Mon', '', 'Wed', '', 'Fri', '', 'Sun'].map((label, i) => (
-            <span key={i} className="h-3 flex items-center leading-3 w-6 text-right pr-0.5">
+            <span key={i} className="h-4 sm:h-5 flex items-center leading-none w-7 sm:w-8 text-right pr-1 sm:pr-1.5">
               {label}
             </span>
           ))}
@@ -224,19 +225,19 @@ export const HabitHeatmap = ({ habits }) => {
 
         <div className="overflow-x-auto pb-1 -mb-1">
           <div className="w-max">
-            <div className="flex gap-[3px] mb-1 h-4 text-[10px] text-muted-foreground">
+            <div className="flex gap-1 sm:gap-1.5 mb-1 h-4 sm:h-5 text-[10px] sm:text-xs text-muted-foreground">
               {monthLabels.map((m, i) => (
-                <span key={i} className="w-3 shrink-0 leading-4">
+                <span key={i} className="w-4 sm:w-5 shrink-0 leading-4 sm:leading-5">
                   {m}
                 </span>
               ))}
             </div>
-            <div className="grid grid-rows-7 grid-flow-col gap-[3px]">
+            <div className="grid grid-rows-7 grid-flow-col gap-1 sm:gap-1.5">
               {days.map((day, i) => (
                 day.future ? (
                   <div
                     key={i}
-                    className="w-3 h-3 rounded-[2px] bg-transparent"
+                    className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-transparent"
                   />
                 ) : (
                   <button
@@ -245,7 +246,7 @@ export const HabitHeatmap = ({ habits }) => {
                     onClick={() => setSelectedDay(day)}
                     aria-label={tooltipFor(day)}
                     className={cn(
-                      'w-3 h-3 rounded-[2px] transition-transform hover:scale-125 hover:ring-2 hover:ring-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer',
+                      'w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] transition-transform hover:scale-125 hover:ring-2 hover:ring-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer',
                       levelClass(day.count)
                     )}
                     title={tooltipFor(day)}
@@ -253,13 +254,13 @@ export const HabitHeatmap = ({ habits }) => {
                 )
               ))}
             </div>
-            <div className="flex items-center gap-1.5 mt-3 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-2 mt-4 text-[10px] sm:text-xs text-muted-foreground">
               <span>Less</span>
-              <span className="w-3 h-3 rounded-[2px] bg-muted" />
-              <span className="w-3 h-3 rounded-[2px] bg-green-500/25" />
-              <span className="w-3 h-3 rounded-[2px] bg-green-500/45" />
-              <span className="w-3 h-3 rounded-[2px] bg-green-500/65" />
-              <span className="w-3 h-3 rounded-[2px] bg-green-500/90" />
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-muted" />
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/25" />
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/45" />
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/65" />
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/90" />
               <span>More</span>
             </div>
           </div>
