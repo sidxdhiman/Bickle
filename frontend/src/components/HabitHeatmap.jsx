@@ -10,6 +10,7 @@ function cn(...inputs) {
 // Wide grid: 44 weeks of large cells spans the full card width on desktop
 const WEEKS = 44;
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAY_LABELS = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'];
 
 export const toDayKey = (d) => {
   const date = new Date(d);
@@ -199,6 +200,10 @@ export const HabitHeatmap = ({ habits }) => {
     return `${dateStr} — ${day.count} habit${day.count === 1 ? '' : 's'} completed · click for details`;
   };
 
+  const numWeeks = Math.ceil(days.length / 7);
+  // Grid stretches columns to fill the card; below this it scrolls sideways
+  const gridMinWidth = `calc(2.5rem + ${numWeeks} * 16px + ${numWeeks} * 6px)`;
+
   return (
     <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
@@ -214,56 +219,68 @@ export const HabitHeatmap = ({ habits }) => {
         Each square is a day, shaded by how many habits you finished. Click a day for details.
       </p>
 
-      <div className="flex gap-2 sm:gap-3">
-        <div className="flex flex-col gap-1 sm:gap-1.5 pt-5 sm:pt-6 text-[10px] sm:text-xs text-muted-foreground shrink-0">
-          {['Mon', '', 'Wed', '', 'Fri', '', 'Sun'].map((label, i) => (
-            <span key={i} className="h-4 sm:h-5 flex items-center leading-none w-7 sm:w-8 text-right pr-1 sm:pr-1.5">
-              {label}
-            </span>
-          ))}
+      {/* GitHub-style panel: the whole graph lives in a visible grey box */}
+      <div className="rounded-xl border border-border bg-background/60 p-3 sm:p-4">
+        <div className="overflow-x-auto pb-1 -mb-1">
+          {/* Month labels — spacer + equal spans mirror the grid columns */}
+          <div
+            className="flex gap-1 sm:gap-1.5 mb-1 text-[10px] sm:text-xs text-muted-foreground"
+            style={{ minWidth: gridMinWidth }}
+          >
+            <span className="w-10 shrink-0" aria-hidden="true" />
+            {monthLabels.map((m, i) => (
+              <span key={i} className="flex-1 min-w-0 truncate leading-4 sm:leading-5">
+                {m}
+              </span>
+            ))}
+          </div>
+
+          {/* Grid: fixed weekday column + equal flexible day columns */}
+          <div
+            className="grid gap-1 sm:gap-1.5 w-full"
+            style={{
+              gridTemplateColumns: `2.5rem repeat(${numWeeks}, minmax(16px, 1fr))`,
+              minWidth: gridMinWidth,
+            }}
+          >
+            {Array.from({ length: 7 }, (_, row) => (
+              <React.Fragment key={row}>
+                <span className="flex items-center justify-end pr-1 sm:pr-1.5 text-[10px] sm:text-xs text-muted-foreground leading-none">
+                  {WEEKDAY_LABELS[row]}
+                </span>
+                {Array.from({ length: numWeeks }, (_, week) => {
+                  const day = days[week * 7 + row];
+                  if (!day || day.future) {
+                    return <span key={week} className="w-full aspect-square rounded-[3px]" />;
+                  }
+                  return (
+                    <button
+                      key={week}
+                      type="button"
+                      onClick={() => setSelectedDay(day)}
+                      aria-label={tooltipFor(day)}
+                      className={cn(
+                        'w-full aspect-square rounded-[3px] transition-transform hover:scale-110 hover:ring-2 hover:ring-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer',
+                        levelClass(day.count)
+                      )}
+                      title={tooltipFor(day)}
+                    />
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
         </div>
 
-        <div className="overflow-x-auto pb-1 -mb-1">
-          <div className="w-max">
-            <div className="flex gap-1 sm:gap-1.5 mb-1 h-4 sm:h-5 text-[10px] sm:text-xs text-muted-foreground">
-              {monthLabels.map((m, i) => (
-                <span key={i} className="w-4 sm:w-5 shrink-0 leading-4 sm:leading-5">
-                  {m}
-                </span>
-              ))}
-            </div>
-            <div className="grid grid-rows-7 grid-flow-col gap-1 sm:gap-1.5">
-              {days.map((day, i) => (
-                day.future ? (
-                  <div
-                    key={i}
-                    className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-transparent"
-                  />
-                ) : (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setSelectedDay(day)}
-                    aria-label={tooltipFor(day)}
-                    className={cn(
-                      'w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] transition-transform hover:scale-125 hover:ring-2 hover:ring-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer',
-                      levelClass(day.count)
-                    )}
-                    title={tooltipFor(day)}
-                  />
-                )
-              ))}
-            </div>
-            <div className="flex items-center gap-2 mt-4 text-[10px] sm:text-xs text-muted-foreground">
-              <span>Less</span>
-              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-muted" />
-              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/25" />
-              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/45" />
-              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/65" />
-              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/90" />
-              <span>More</span>
-            </div>
-          </div>
+        {/* Legend inside the panel */}
+        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/60 text-[10px] sm:text-xs text-muted-foreground">
+          <span>Less</span>
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-muted" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/25" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/45" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/65" />
+          <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-[3px] bg-green-500/90" />
+          <span>More</span>
         </div>
       </div>
 
