@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { Plus, Check, X, Edit, Trash2, CalendarDays, BarChart3, Flame, ListChecks, PartyPopper } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -120,6 +121,8 @@ const Habits = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingHabit, setEditingHabit] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
+  const [highlightId, setHighlightId] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const today = useMemo(() => {
     const t = new Date();
@@ -146,6 +149,25 @@ const Habits = () => {
   useEffect(() => {
     if (!loading) stash('habits', { habits });
   }, [loading, habits]);
+
+  // Deep link: /habits?habit=<id> scrolls to and highlights that habit
+  useEffect(() => {
+    const hid = searchParams.get('habit');
+    if (!hid) return;
+    if (loading || habits.length === 0) return;
+    const exists = habits.some(h => h._id === hid);
+    if (!exists) {
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    setHighlightId(hid);
+    requestAnimationFrame(() => {
+      document.getElementById(`habit-${hid}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setSearchParams({}, { replace: true });
+    const t = setTimeout(() => setHighlightId(null), 2500);
+    return () => clearTimeout(t);
+  }, [searchParams, loading, habits, setSearchParams]);
 
   const handleCreateHabit = async (habitData) => {
     try {
@@ -269,9 +291,11 @@ const Habits = () => {
                   return (
                     <div
                       key={habit._id}
+                      id={`habit-${habit._id}`}
                       className={cn(
                         'bg-secondary border rounded-xl p-4 flex items-start sm:items-center gap-3 sm:gap-4 transition-colors',
-                        completedToday ? 'border-green-500/30' : 'border-border'
+                        completedToday ? 'border-green-500/30' : 'border-border',
+                        highlightId === habit._id && 'ring-2 ring-primary border-primary/50'
                       )}
                     >
                       <button

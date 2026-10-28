@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Bell, User, Clock, LogOut, Menu } from 'lucide-react';
 import ProfileModal from './ProfileModal';
+import SearchPalette from './SearchPalette';
 import { useAccess } from '../context/AccessContext';
 import { useNavMode } from '../hooks/useNavMode';
 
@@ -17,7 +18,20 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
   const [showProfile, setShowProfile] = useState(false);
   const [profilePic, setProfilePic] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [searchOpen, setSearchOpen] = useState(false);
   const profileRef = useRef(null);
+
+  // Global ⌘K / Ctrl+K shortcut to open search from anywhere
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(open => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   useEffect(() => {
     const pic = localStorage.getItem('profilePic');
@@ -63,14 +77,24 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
             </div>
             <span className="text-lg font-bold tracking-tight">Bickle</span>
           </div>
-          <div className="relative hidden sm:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Quick search..."
-              className="pl-9 pr-4 py-1.5 rounded-lg bg-background/60 border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary w-44 lg:w-64 transition-all"
-            />
-          </div>
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Quick search"
+            className="relative flex items-center gap-2 rounded-lg bg-background/60 border border-border text-sm text-muted-foreground hover:border-primary/50 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary transition-all py-1.5 pl-9 pr-2 w-44 lg:w-64 hidden sm:flex"
+          >
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" />
+            <span className="flex-1 text-left">Quick search...</span>
+            <kbd className="text-[10px] border border-border rounded px-1 py-0.5 bg-secondary leading-none">⌘K</kbd>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Quick search"
+            className="sm:hidden p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+          >
+            <Search className="w-5 h-5" />
+          </button>
         </div>
 
         <div className="flex items-center gap-4 shrink-0">
@@ -116,6 +140,7 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
       </header>
 
       {!isGuest && <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />}
+      <SearchPalette isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -184,6 +185,7 @@ const NotesPage = () => {
   const undoTimerRef = useRef(null);
   const [noteToDelete, setNoteToDelete] = useState(null);
   const [movePrompt, setMovePrompt] = useState(null); // { note, from, to }
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const getSelection = () => {
     const textarea = textAreaRef.current;
@@ -262,6 +264,18 @@ const NotesPage = () => {
   useEffect(() => {
     if (!loading) stash('notes', { notes, categories, activeNote });
   }, [loading, notes, categories, activeNote]);
+
+  // Deep link: /notes?noteId=<id> opens that note in the editor
+  useEffect(() => {
+    const nid = searchParams.get('noteId');
+    if (!nid || loading) return;
+    const found = notes.find(n => n._id === nid);
+    if (found) {
+      setSelectedCategory('All');
+      setActiveNote(found);
+    }
+    setSearchParams({}, { replace: true });
+  }, [searchParams, loading, notes, setSearchParams]);
 
   const noteMatches = (note, cat = selectedCategory) => {
     const matchesCategory = cat === 'All' || note.category === cat;
