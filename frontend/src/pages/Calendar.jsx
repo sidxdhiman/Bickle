@@ -1214,7 +1214,7 @@ const CalendarPage = () => {
   };
 
   return (
-    <div className="h-full flex flex-col gap-6">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       <DayDetailsModal
         isOpen={isDayDetailsOpen}
         date={selectedDate}
@@ -1242,7 +1242,7 @@ const CalendarPage = () => {
       />
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-col gap-4 sm:gap-6">
+        <div className="flex flex-col gap-3 sm:gap-4">
           <div className="flex flex-wrap items-center gap-4">
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
@@ -1351,20 +1351,20 @@ const CalendarPage = () => {
         </div>
       </header>
 
-      <div className="flex-1 overflow-hidden bg-secondary/50 border border-border rounded-2xl">
+      <div className="flex-1 min-h-0 overflow-hidden bg-secondary/50 border border-border rounded-2xl">
         {loading ? (
           <CalendarSkeleton />
         ) : view === 'month' ? (
-          <div className="h-full flex flex-col p-4">
-            <div className="sticky top-0 z-10 grid grid-cols-7 border-b border-border pb-3 bg-secondary/50">
+          <div className="h-full flex flex-col p-3">
+            <div className="sticky top-0 z-10 grid grid-cols-7 border-b border-border pb-2 bg-secondary/50">
               {days.map((day) => (
-                <div key={day} className="py-3 text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                <div key={day} className="py-2 text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   {day}
                 </div>
               ))}
             </div>
-            <div className="overflow-auto flex-1">
-              <div className="grid grid-cols-7 gap-px bg-border">
+            <div className="overflow-auto flex-1 min-h-0">
+              <div className="h-full min-h-[360px] grid grid-cols-7 grid-rows-6 gap-px bg-border">
                 {buildMonthGrid(currentDate).map((date) => {
                 const inCurrentMonth = date.getMonth() === currentDate.getMonth();
                 const dayEvents = getItemsForDate(date);
@@ -1376,13 +1376,13 @@ const CalendarPage = () => {
                     type="button"
                     onClick={() => openDayDetails(date)}
                     className={cn(
-                      'min-h-[100px] w-full overflow-hidden bg-background p-3 text-left transition-colors',
+                      'w-full overflow-hidden bg-background p-2 text-left transition-colors flex flex-col',
                       !inCurrentMonth && 'bg-muted/50 text-muted-foreground',
                       isToday && 'ring-2 ring-primary/50 bg-primary/5',
                       'hover:bg-accent/40'
                     )}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center justify-between gap-2 shrink-0">
                       <span className={cn('text-sm font-semibold', isToday ? 'text-primary' : 'text-foreground')}>
                         {date.getDate()}
                       </span>
@@ -1398,7 +1398,7 @@ const CalendarPage = () => {
                         )}
                       </div>
                     </div>
-                    <div className="mt-2 space-y-1">
+                    <div className="mt-1.5 space-y-1 min-h-0 overflow-hidden">
                       {dayEvents.slice(0, 3).map((item) => (
                         <button
                           type="button"
