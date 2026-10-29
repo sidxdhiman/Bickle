@@ -6,6 +6,12 @@ const taskSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  guestSession: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GuestSession',
+    default: null,
+    index: true,
+  },
   list: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'TaskList',

@@ -1,4 +1,5 @@
 const Sleep = require('../models/Sleep');
+const { scopeFilter, scopeFields } = require('../middleware/scope');
 
 // --- Sleep Record Controllers ---
 
@@ -10,7 +11,7 @@ exports.createSleep = async (req, res) => {
     const duration = Math.round((sleepEndDate - sleepStartDate) / (1000 * 60)); // minutes
 
     const sleep = await Sleep.create({
-      user: req.user._id,
+      ...scopeFields(req),
       date: new Date(date),
       sleepStart: sleepStartDate,
       sleepEnd: sleepEndDate,
@@ -26,7 +27,7 @@ exports.createSleep = async (req, res) => {
 
 exports.getSleeps = async (req, res) => {
   try {
-    const sleeps = await Sleep.find({ user: req.user._id }).sort({ date: -1 });
+    const sleeps = await Sleep.find(scopeFilter(req)).sort({ date: -1 });
     res.json(sleeps);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -41,7 +42,7 @@ exports.updateSleep = async (req, res) => {
     const duration = Math.round((sleepEndDate - sleepStartDate) / (1000 * 60));
 
     const sleep = await Sleep.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, ...scopeFilter(req) },
       {
         date: new Date(date),
         sleepStart: sleepStartDate,
@@ -61,7 +62,7 @@ exports.updateSleep = async (req, res) => {
 
 exports.deleteSleep = async (req, res) => {
   try {
-    const sleep = await Sleep.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const sleep = await Sleep.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
     if (!sleep) return res.status(404).json({ message: 'Sleep record not found' });
     res.json({ message: 'Sleep record deleted' });
   } catch (error) {
@@ -102,7 +103,7 @@ exports.getWakeTime = async (req, res) => {
     const cycleMinutes = 90;
 
     const wakeTimes = [];
-    for (let i = 3; i <= cycles + 2; i++) { // 3 to 4-5 suggestions
+    for (let i = 3; i <= cycles + 2; i++) { // suggest 3 to 4-5 suggestions
       const wakeTime = new Date(sleepDate.getTime() + i * cycleMinutes * 60 * 1000);
       wakeTimes.push({
         cycles: i,

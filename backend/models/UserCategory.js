@@ -6,6 +6,12 @@ const userCategorySchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  guestSession: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GuestSession',
+    default: null,
+    index: true,
+  },
   name: {
     type: String,
     required: true,
@@ -24,7 +30,7 @@ const userCategorySchema = new mongoose.Schema({
   timestamps: true,
 });
 
-// Ensure user can't have duplicate category names
-userCategorySchema.index({ userId: 1, name: 1, type: 1 }, { unique: true });
+// Unique per partition: no duplicate category names within one data scope.
+userCategorySchema.index({ userId: 1, guestSession: 1, name: 1, type: 1 }, { unique: true });
 
 module.exports = mongoose.model('UserCategory', userCategorySchema);

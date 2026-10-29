@@ -1,5 +1,6 @@
 const Transaction = require('../models/Transaction');
 const UserCategory = require('../models/UserCategory');
+const { scopeFilter } = require('../middleware/scope');
 
 // Default categories for new users
 const DEFAULT_CATEGORIES = {
@@ -11,14 +12,14 @@ const DEFAULT_CATEGORIES = {
 exports.addTransaction = async (req, res) => {
   try {
     const { type, amount, category, description, date } = req.body;
-    const userId = req.user.id;
 
     if (!type || !amount || !category) {
       return res.status(400).json({ message: 'Type, amount, and category are required' });
     }
 
     const transaction = new Transaction({
-      userId,
+      guestSession: req.dataScope.guestSession,
+      userId: req.dataScope.user,
       type,
       amount,
       category,
@@ -37,7 +38,6 @@ exports.addTransaction = async (req, res) => {
 exports.getMonthlyTransactions = async (req, res) => {
   try {
     const { year, month } = req.query;
-    const userId = req.user.id;
 
     if (!year || !month) {
       return res.status(400).json({ message: 'Year and month are required' });
@@ -47,7 +47,7 @@ exports.getMonthlyTransactions = async (req, res) => {
     const endDate = new Date(year, month, 0, 23, 59, 59);
 
     const transactions = await Transaction.find({
-      userId,
+      ...scopeFilter(req, 'userId'),
       date: { $gte: startDate, $lte: endDate },
     }).sort({ date: -1 });
 
@@ -90,10 +90,9 @@ exports.updateTransaction = async (req, res) => {
   try {
     const { id } = req.params;
     const { type, amount, category, description, date } = req.body;
-    const userId = req.user.id;
 
     const transaction = await Transaction.findOneAndUpdate(
-      { _id: id, userId },
+      { _id: id, ...scopeFilter(req, 'userId') },
       { type, amount, category, description, date: date ? new Date(date) : undefined },
       { new: true }
     );
@@ -112,9 +111,8 @@ exports.updateTransaction = async (req, res) => {
 exports.deleteTransaction = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
 
-    const transaction = await Transaction.findOneAndDelete({ _id: id, userId });
+    const transaction = await Transaction.findOneAndDelete({ _id: id, ...scopeFilter(req, 'userId') });
 
     if (!transaction) {
       return res.status(404).json({ message: 'Transaction not found' });
@@ -126,13 +124,11 @@ exports.deleteTransaction = async (req, res) => {
   }
 };
 
-// Initialize default categories for user
+// Initialize default categories for user (or the current guest partition)
 exports.initializeDefaultCategories = async (req, res) => {
   try {
-    const userId = req.user.id;
-
-    // Check if categories already exist
-    const existingCategories = await UserCategory.findOne({ userId });
+    // Check if categories already exist in this partition
+    const existingCategories = await UserCategory.findOne(scopeFilter(req, 'userId'));
     if (existingCategories) {
       return res.status(200).json({ message: 'Categories already initialized' });
     }
@@ -141,7 +137,8 @@ exports.initializeDefaultCategories = async (req, res) => {
     const categoriesToCreate = [];
     DEFAULT_CATEGORIES.expense.forEach((name) => {
       categoriesToCreate.push({
-        userId,
+        guestSession: req.dataScope.guestSession,
+        userId: req.dataScope.user,
         name,
         type: 'expense',
         color: '#3B82F6',
@@ -150,7 +147,8 @@ exports.initializeDefaultCategories = async (req, res) => {
 
     DEFAULT_CATEGORIES.income.forEach((name) => {
       categoriesToCreate.push({
-        userId,
+        guestSession: req.dataScope.guestSession,
+        userId: req.dataScope.user,
         name,
         type: 'income',
         color: '#10B981',
@@ -167,10 +165,9 @@ exports.initializeDefaultCategories = async (req, res) => {
 // Get all categories for a user
 exports.getCategories = async (req, res) => {
   try {
-    const userId = req.user.id;
     const { type } = req.query;
 
-    let query = { userId };
+    let query = scopeFilter(req, 'userId');
     if (type) {
       query.type = type;
     }
@@ -186,7 +183,6 @@ exports.getCategories = async (req, res) => {
 // Add a custom category
 exports.addCategory = async (req, res) => {
   try {
-    const userId = req.user.id;
     const { name, type, color } = req.body;
 
     if (!name || !type) {
@@ -194,7 +190,8 @@ exports.addCategory = async (req, res) => {
     }
 
     const category = new UserCategory({
-      userId,
+      guestSession: req.dataScope.guestSession,
+      userId: req.dataScope.user,
       name,
       type,
       color: color || '#3B82F6',
@@ -214,9 +211,8 @@ exports.addCategory = async (req, res) => {
 exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user.id;
 
-    const category = await UserCategory.findOneAndDelete({ _id: id, userId });
+    const category = await UserCategory.findOneAndDelete({ _id: id, ...scopeFilter(req, 'userId') });
 
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });

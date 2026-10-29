@@ -1,9 +1,10 @@
 const Whiteboard = require('../models/Whiteboard');
+const { scopeFilter, scopeFields } = require('../middleware/scope');
 
 exports.createWhiteboard = async (req, res) => {
   try {
     const board = await Whiteboard.create({
-      user: req.user._id,
+      ...scopeFields(req),
       title: req.body.title || 'Untitled Board',
       elements: Array.isArray(req.body.elements) ? req.body.elements : [],
       background: req.body.background || 'grid',
@@ -19,7 +20,7 @@ exports.createWhiteboard = async (req, res) => {
 
 exports.getWhiteboards = async (req, res) => {
   try {
-    const boards = await Whiteboard.find({ user: req.user._id }).sort({ lastEdited: -1 });
+    const boards = await Whiteboard.find(scopeFilter(req)).sort({ lastEdited: -1 });
     res.json(boards);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -28,7 +29,7 @@ exports.getWhiteboards = async (req, res) => {
 
 exports.getWhiteboard = async (req, res) => {
   try {
-    const board = await Whiteboard.findOne({ _id: req.params.id, user: req.user._id });
+    const board = await Whiteboard.findOne({ _id: req.params.id, ...scopeFilter(req) });
     if (!board) return res.status(404).json({ message: 'Whiteboard not found' });
     res.json(board);
   } catch (error) {
@@ -44,7 +45,7 @@ exports.updateWhiteboard = async (req, res) => {
     if (req.body.background !== undefined) update.background = req.body.background;
 
     const board = await Whiteboard.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, ...scopeFilter(req) },
       update,
       { new: true }
     );
@@ -57,7 +58,7 @@ exports.updateWhiteboard = async (req, res) => {
 
 exports.deleteWhiteboard = async (req, res) => {
   try {
-    const board = await Whiteboard.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const board = await Whiteboard.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
     if (!board) return res.status(404).json({ message: 'Whiteboard not found' });
     res.json({ message: 'Whiteboard deleted' });
   } catch (error) {

@@ -1,11 +1,12 @@
 const TaskList = require('../models/TaskList');
 const Task = require('../models/Task');
+const { scopeFilter, scopeFields, sanitizeBody } = require('../middleware/scope');
 
 // --- TaskList Controllers ---
 
 exports.createList = async (req, res) => {
   try {
-    const list = await TaskList.create({ ...req.body, user: req.user._id });
+    const list = await TaskList.create({ ...sanitizeBody(req.body), ...scopeFields(req) });
     res.status(201).json(list);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -14,7 +15,7 @@ exports.createList = async (req, res) => {
 
 exports.getLists = async (req, res) => {
   try {
-    const lists = await TaskList.find({ user: req.user._id }).sort({ isFavorite: -1, name: 1 });
+    const lists = await TaskList.find(scopeFilter(req)).sort({ isFavorite: -1, name: 1 });
     res.json(lists);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -24,8 +25,8 @@ exports.getLists = async (req, res) => {
 exports.updateList = async (req, res) => {
   try {
     const list = await TaskList.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
-      req.body,
+      { _id: req.params.id, ...scopeFilter(req) },
+      sanitizeBody(req.body),
       { new: true }
     );
     if (!list) return res.status(404).json({ message: 'List not found' });
@@ -37,9 +38,9 @@ exports.updateList = async (req, res) => {
 
 exports.deleteList = async (req, res) => {
   try {
-    const list = await TaskList.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const list = await TaskList.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
     if (!list) return res.status(404).json({ message: 'List not found' });
-    await Task.deleteMany({ list: req.params.id });
+    await Task.deleteMany({ list: req.params.id, ...scopeFilter(req) });
     res.json({ message: 'List and associated tasks deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -51,7 +52,7 @@ exports.updateListStatuses = async (req, res) => {
   try {
     const { statuses } = req.body;
     const list = await TaskList.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
+      { _id: req.params.id, ...scopeFilter(req) },
       { statuses },
       { new: true }
     );
@@ -66,7 +67,7 @@ exports.updateListStatuses = async (req, res) => {
 
 exports.createTask = async (req, res) => {
   try {
-    const task = await Task.create({ ...req.body, user: req.user._id });
+    const task = await Task.create({ ...sanitizeBody(req.body), ...scopeFields(req) });
     res.status(201).json(task);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -76,7 +77,7 @@ exports.createTask = async (req, res) => {
 exports.getTasks = async (req, res) => {
   try {
     const { listId } = req.query;
-    const filter = { user: req.user._id };
+    const filter = scopeFilter(req);
     if (listId) filter.list = listId;
 
     const tasks = await Task.find(filter).sort({ order: 1, createdAt: -1 });
@@ -89,8 +90,8 @@ exports.getTasks = async (req, res) => {
 exports.updateTask = async (req, res) => {
   try {
     const task = await Task.findOneAndUpdate(
-      { _id: req.params.id, user: req.user._id },
-      req.body,
+      { _id: req.params.id, ...scopeFilter(req) },
+      sanitizeBody(req.body),
       { new: true }
     );
     if (!task) return res.status(404).json({ message: 'Task not found' });
@@ -102,7 +103,7 @@ exports.updateTask = async (req, res) => {
 
 exports.deleteTask = async (req, res) => {
   try {
-    const task = await Task.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const task = await Task.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
     if (!task) return res.status(404).json({ message: 'Task not found' });
     res.json({ message: 'Task deleted' });
   } catch (error) {

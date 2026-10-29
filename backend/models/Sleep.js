@@ -6,6 +6,12 @@ const sleepSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  guestSession: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GuestSession',
+    default: null,
+    index: true,
+  },
   date: {
     type: Date,
     required: true,

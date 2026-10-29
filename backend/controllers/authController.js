@@ -48,5 +48,14 @@ exports.loginUser = async (req, res) => {
 };
 
 exports.getMe = async (req, res) => {
+  // Guests must never receive the owner's profile/contact details.
+  if (req.guest) {
+    return res.json({
+      _id: req.user._id,
+      username: 'Guest',
+      isGuest: true,
+      allowedPages: req.guest.allowedPages,
+    });
+  }
   res.json(req.user);
 };

@@ -6,6 +6,12 @@ const categorySchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  guestSession: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GuestSession',
+    default: null,
+    index: true,
+  },
   name: {
     type: String,
     required: true,
@@ -15,6 +21,8 @@ const categorySchema = new mongoose.Schema({
   timestamps: true,
 });
 
-categorySchema.index({ user: 1, name: 1 }, { unique: true });
+// Unique per partition: owner (guestSession null) and each guest session
+// can independently hold a category with the same name.
+categorySchema.index({ user: 1, guestSession: 1, name: 1 }, { unique: true });
 
 module.exports = mongoose.model('Category', categorySchema);

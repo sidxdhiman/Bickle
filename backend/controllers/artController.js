@@ -50,12 +50,18 @@ const fail = (res, error) => {
   return res.status(500).json({ message: error.message });
 };
 
+// Creates land in the caller's partition; public/owner reads see only
+// non-guest art (guestSession: null), guests see only their own session.
+const guestSession = (req) => (req.dataScope ? req.dataScope.guestSession : null);
+const readScope = (req) => ({ guestSession: guestSession(req) });
+
 exports.createBlog = async (req, res) => {
   try {
     const files = req.files || [];
     const meta = parseJson(req.body.imageMeta, []);
     const blog = await ArtBlog.create({
       user: req.user._id,
+      guestSession: guestSession(req),
       title: (req.body.title || '').trim() || 'Untitled',
       content: req.body.content || '',
       images: files.map((file) => toUrl('images', file.filename)),
@@ -65,6 +71,7 @@ exports.createBlog = async (req, res) => {
       const info = meta[index] || {};
       return ArtPhoto.create({
         user: req.user._id,
+        guestSession: guestSession(req),
         title: info.title || baseName(file.originalname),
         description: info.description || '',
         location: info.location || '',
@@ -91,6 +98,7 @@ exports.createPhoto = async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Choose an image to upload' });
     const photo = await ArtPhoto.create({
       user: req.user._id,
+      guestSession: guestSession(req),
       title: (req.body.title || '').trim() || baseName(req.file.originalname),
       description: req.body.description || '',
       location: req.body.location || '',
@@ -114,6 +122,7 @@ exports.createVideo = async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Choose a video to upload' });
     const video = await ArtVideo.create({
       user: req.user._id,
+      guestSession: guestSession(req),
       title: (req.body.title || '').trim() || baseName(req.file.originalname),
       description: req.body.description || '',
       location: req.body.location || '',
@@ -136,6 +145,7 @@ exports.createMusic = async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Choose an audio file to upload' });
     const music = await ArtMusic.create({
       user: req.user._id,
+      guestSession: guestSession(req),
       title: (req.body.title || '').trim() || baseName(req.file.originalname),
       description: req.body.description || '',
       madeAt: toDate(req.body.madeAt),
@@ -153,7 +163,7 @@ exports.createMusic = async (req, res) => {
 
 exports.getBlogs = async (req, res) => {
   try {
-    const blogs = await ArtBlog.find().sort({ createdAt: -1 });
+    const blogs = await ArtBlog.find(readScope(req)).sort({ createdAt: -1 });
     res.json(blogs);
   } catch (error) {
     fail(res, error);
@@ -162,7 +172,7 @@ exports.getBlogs = async (req, res) => {
 
 exports.getBlog = async (req, res) => {
   try {
-    const blog = await ArtBlog.findById(req.params.id);
+    const blog = await ArtBlog.findOne({ _id: req.params.id, ...readScope(req) });
     if (!blog) return res.status(404).json({ message: 'Post not found' });
     res.json(blog);
   } catch (error) {
@@ -172,7 +182,7 @@ exports.getBlog = async (req, res) => {
 
 exports.getPhotos = async (req, res) => {
   try {
-    const photos = await ArtPhoto.find().sort({ takenAt: -1, createdAt: -1 });
+    const photos = await ArtPhoto.find(readScope(req)).sort({ takenAt: -1, createdAt: -1 });
     res.json(photos);
   } catch (error) {
     fail(res, error);
@@ -181,7 +191,7 @@ exports.getPhotos = async (req, res) => {
 
 exports.getVideos = async (req, res) => {
   try {
-    const videos = await ArtVideo.find().sort({ recordedAt: -1, createdAt: -1 });
+    const videos = await ArtVideo.find(readScope(req)).sort({ recordedAt: -1, createdAt: -1 });
     res.json(videos);
   } catch (error) {
     fail(res, error);
@@ -190,7 +200,7 @@ exports.getVideos = async (req, res) => {
 
 exports.getMusic = async (req, res) => {
   try {
-    const tracks = await ArtMusic.find().sort({ madeAt: -1, createdAt: -1 });
+    const tracks = await ArtMusic.find(readScope(req)).sort({ madeAt: -1, createdAt: -1 });
     res.json(tracks);
   } catch (error) {
     fail(res, error);
@@ -206,18 +216,21 @@ const MODELS = {
 
 exports.deleteArt = async (req, res) => {
   try {
-    if (req.guest) {
-      return res.status(403).json({ message: 'Guests cannot remove published work' });
-    }
-
     const Model = MODELS[req.params.type];
     if (!Model) return res.status(400).json({ message: 'Unknown art type' });
 
-    const item = await Model.findOneAndDelete({ _id: req.params.id, user: req.user._id });
+    const item = await Model.findOneAndDelete({
+      _id: req.params.id,
+      user: req.dataScope.user,
+      guestSession: req.dataScope.guestSession,
+    });
     if (!item) return res.status(404).json({ message: 'Not found' });
 
     if (item.source === 'blog' && item.blog) {
-      await ArtBlog.updateOne({ _id: item.blog }, { $pull: { images: item.url } });
+      await ArtBlog.updateOne(
+        { _id: item.blog, user: req.dataScope.user, guestSession: req.dataScope.guestSession },
+        { $pull: { images: item.url } }
+      );
     }
 
     const files = [item.url, ...(item.images || [])];

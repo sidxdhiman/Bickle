@@ -6,6 +6,12 @@ const transactionSchema = new mongoose.Schema({
     ref: 'User',
     required: true,
   },
+  guestSession: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'GuestSession',
+    default: null,
+    index: true,
+  },
   type: {
     type: String,
     enum: ['income', 'expense'],

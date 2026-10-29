@@ -1,4 +1,5 @@
 const Habit = require('../models/Habit');
+const { scopeFilter } = require('../middleware/scope');
 
 // Normalize any date to its local midnight timestamp (day-level identity)
 const dayKey = (d) => {
@@ -36,7 +37,7 @@ const computeStreak = (completedDates) => {
 // @access  Private
 exports.getHabits = async (req, res) => {
   try {
-    const habits = await Habit.find({ userId: req.user.id }).sort({ createdAt: -1 });
+    const habits = await Habit.find(scopeFilter(req, 'userId')).sort({ createdAt: -1 });
     res.json(habits);
   } catch (err) {
     console.error(err.message);
@@ -49,13 +50,9 @@ exports.getHabits = async (req, res) => {
 // @access  Private
 exports.getHabitById = async (req, res) => {
   try {
-    const habit = await Habit.findById(req.params.id);
+    const habit = await Habit.findOne({ _id: req.params.id, ...scopeFilter(req, 'userId') });
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
-    }
-    // Ensure user owns habit
-    if (habit.userId.toString() !== req.user.id) {
-      return res.status(401).json({ msg: 'Not authorized' });
     }
     res.json(habit);
   } catch (err) {
@@ -80,7 +77,8 @@ exports.createHabit = async (req, res) => {
 
   try {
     const newHabit = new Habit({
-      userId: req.user.id,
+      userId: req.dataScope.user,
+      guestSession: req.dataScope.guestSession,
       name,
       description,
       frequency,
@@ -109,22 +107,15 @@ exports.updateHabit = async (req, res) => {
   if (streak !== undefined) habitFields.streak = streak;
 
   try {
-    let habit = await Habit.findById(req.params.id);
+    const habit = await Habit.findOneAndUpdate(
+      { _id: req.params.id, ...scopeFilter(req, 'userId') },
+      { $set: habitFields },
+      { new: true }
+    );
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
     }
-
-    // Ensure user owns habit
-    if (habit.userId.toString() !== req.user.id) {
-      return res.status(401).json({ msg: 'Not authorized' });
-    }
-
-    habit = await Habit.findByIdAndUpdate(
-      req.params.id,
-      { $set: habitFields },
-      { new: true }
-    );
 
     res.json(habit);
   } catch (err) {
@@ -141,18 +132,11 @@ exports.updateHabit = async (req, res) => {
 // @access  Private
 exports.deleteHabit = async (req, res) => {
   try {
-    const habit = await Habit.findById(req.params.id);
+    const habit = await Habit.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req, 'userId') });
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
     }
-
-    // Ensure user owns habit
-    if (habit.userId.toString() !== req.user.id) {
-      return res.status(401).json({ msg: 'Not authorized' });
-    }
-
-    await Habit.findByIdAndDelete(req.params.id);
 
     res.json({ msg: 'Habit removed' });
   } catch (err) {
@@ -169,15 +153,10 @@ exports.deleteHabit = async (req, res) => {
 // @access  Private
 exports.completeHabit = async (req, res) => {
   try {
-    let habit = await Habit.findById(req.params.id);
+    const habit = await Habit.findOne({ _id: req.params.id, ...scopeFilter(req, 'userId') });
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
-    }
-
-    // Ensure user owns habit
-    if (habit.userId.toString() !== req.user.id) {
-      return res.status(401).json({ msg: 'Not authorized' });
     }
 
     const today = new Date();
@@ -211,15 +190,10 @@ exports.completeHabit = async (req, res) => {
 // @access  Private
 exports.uncompleteHabit = async (req, res) => {
   try {
-    const habit = await Habit.findById(req.params.id);
+    const habit = await Habit.findOne({ _id: req.params.id, ...scopeFilter(req, 'userId') });
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
-    }
-
-    // Ensure user owns habit
-    if (habit.userId.toString() !== req.user.id) {
-      return res.status(401).json({ msg: 'Not authorized' });
     }
 
     const today = new Date();

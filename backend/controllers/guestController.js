@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const GuestSession = require('../models/GuestSession');
 const { GRANTABLE_PAGE_KEYS } = require('../config/pages');
+const { purgeGuestData } = require('../utils/purgeGuestSession');
 
 const serialize = (session) => ({
   _id: session._id,
@@ -69,6 +70,8 @@ exports.revokeSession = async (req, res) => {
       { new: true }
     );
     if (!session) return res.status(404).json({ message: 'Session not found' });
+    // Revoked → the guest's temporary partition is wiped immediately.
+    await purgeGuestData(session._id);
     res.json(serialize(session));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -113,6 +116,8 @@ exports.endSessionByToken = async (req, res) => {
 
     session.active = false;
     await session.save();
+    // Guest-ended session → wipe its temporary partition too.
+    await purgeGuestData(session._id);
     res.json({ message: 'Session ended' });
   } catch (error) {
     res.status(401).json({ message: 'Invalid access link' });

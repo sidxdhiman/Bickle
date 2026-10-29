@@ -48,6 +48,26 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
+// Wipe temporary partitions left behind by expired/revoked guest sessions and
+// migrate per-partition unique indexes (Category/UserCategory).
+const cleanupPartitions = async () => {
+  try {
+    const Category = require('./models/Category');
+    const UserCategory = require('./models/UserCategory');
+    await Category.syncIndexes();
+    await UserCategory.syncIndexes();
+  } catch (error) {
+    console.warn('Partition index sync failed:', error.message);
+  }
+  try {
+    const { purgeStaleSessions } = require('./utils/purgeGuestSession');
+    const purged = await purgeStaleSessions();
+    if (purged > 0) console.log(`Purged data from ${purged} stale guest session(s)`);
+  } catch (error) {
+    console.warn('Stale guest session purge failed:', error.message);
+  }
+};
+
 const startServer = async () => {
   let mongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bickle';
 
@@ -58,6 +78,7 @@ const startServer = async () => {
   try {
     await mongoose.connect(mongoURI);
     console.log('Connected to MongoDB');
+    await cleanupPartitions();
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
     return;
   } catch (err) {
@@ -71,6 +92,7 @@ const startServer = async () => {
         const memUri = mongod.getUri();
         await mongoose.connect(memUri);
         console.log('Connected to in-memory MongoDB');
+        await cleanupPartitions();
         app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
         // stop in-memory server on exit
         const cleanExit = async () => {

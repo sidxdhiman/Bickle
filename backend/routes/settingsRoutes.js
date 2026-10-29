@@ -8,10 +8,13 @@ const Note = require('../models/Note');
 const CalendarEvent = require('../models/CalendarEvent');
 const Sleep = require('../models/Sleep');
 
-// Delete all user data
+// Delete all user data (owner only — never reachable by a guest session)
 const deleteAllData = async (req, res) => {
   try {
-    const userId = req.user.id;
+    if (req.guest) {
+      return res.status(403).json({ message: 'Guests cannot delete data' });
+    }
+    const userId = req.dataScope.user;
 
     // Delete all tasks
     await Task.deleteMany({ user: userId });
