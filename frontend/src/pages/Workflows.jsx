@@ -1165,15 +1165,21 @@ const Workflows = () => {
                       className="absolute inset-0 bg-black/60 backdrop-blur-sm"
                       onClick={closeRunModal}
                     />
-                    <div className="relative w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl bg-secondary border border-border shadow-2xl">
-                      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-4 border-b border-border bg-secondary">
-                        <div className="min-w-0">
-                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Workflow run</p>
-                          <h2 className="font-semibold truncate">{selected.title}</h2>
+                    <div className="relative w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl bg-background border border-primary/25 shadow-2xl">
+                      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-4 border-b border-primary/20 bg-background">
+                        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-primary/15 via-primary/[0.07] to-transparent" />
+                        <div className="relative flex min-w-0 items-center gap-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary ring-1 ring-primary/30">
+                            <Play size={16} />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-primary">Workflow run</p>
+                            <h2 className="font-semibold truncate">{selected.title}</h2>
+                          </div>
                         </div>
                         <button
                           onClick={closeRunModal}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition"
+                          className="relative p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition"
                           title="Close run"
                         >
                           <X size={18} />
@@ -1183,9 +1189,11 @@ const Workflows = () => {
                         <div>
                     {!run && (
                       <div className="text-center py-14 space-y-4">
-                        <Play className="w-10 h-10 text-primary mx-auto" />
+                        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/15 text-primary ring-1 ring-primary/30">
+                          <Play className="w-7 h-7" />
+                        </span>
                         <div>
-                          <p className="font-medium">Ready to run</p>
+                          <p className="text-lg font-semibold">Ready to run</p>
                           <p className="text-sm text-muted-foreground">
                             {selected.steps.length} step{selected.steps.length === 1 ? '' : 's'} · decisions and
                             exceptions will guide the path.
@@ -1193,7 +1201,7 @@ const Workflows = () => {
                         </div>
                         <button
                           onClick={startRun}
-                          className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2.5 rounded-lg transition"
+                          className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-5 py-2.5 rounded-lg shadow-lg shadow-primary/30 transition"
                         >
                           <Play size={16} /> Start run
                         </button>
@@ -1204,18 +1212,18 @@ const Workflows = () => {
                       <div className="space-y-4">
                         {/* progress */}
                         <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary">
                               Step {selected.steps.findIndex((s) => s.id === currentStep.id) + 1} of{' '}
                               {selected.steps.length} · {visitedIds.size} done
                             </span>
-                            <span className="flex items-center gap-1 tabular-nums">
+                            <span className="flex items-center gap-1 tabular-nums text-muted-foreground">
                               <Clock size={11} /> {formatDuration(elapsed)}
                             </span>
                           </div>
-                          <div className="h-1.5 rounded-full bg-background border border-border overflow-hidden">
+                          <div className="h-1.5 rounded-full bg-primary/10 overflow-hidden">
                             <div
-                              className="h-full bg-primary transition-all duration-300"
+                              className="h-full bg-gradient-to-r from-primary to-primary/50 transition-all duration-300"
                               style={{ width: `${progressPct}%` }}
                             />
                           </div>
@@ -1236,7 +1244,7 @@ const Workflows = () => {
                         )}
 
                         {/* current step card */}
-                        <div className="rounded-2xl border border-primary/40 bg-primary/5 p-5 md:p-6 space-y-4">
+                        <div className="rounded-2xl border border-primary/35 bg-gradient-to-br from-primary/15 to-primary/5 p-5 md:p-6 space-y-4">
                           <span
                             className={cn(
                               'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium',
@@ -1301,7 +1309,7 @@ const Workflows = () => {
                                     onClick={() =>
                                       advanceRun(currentStep, 'choice', { goto: opt.goto, label: opt.label })
                                     }
-                                    className="inline-flex items-center gap-2 bg-accent hover:bg-accent/70 px-4 py-2 rounded-lg text-sm font-medium transition"
+                                    className="inline-flex items-center gap-2 border border-primary/35 bg-primary/10 text-primary hover:bg-primary/15 px-4 py-2 rounded-lg text-sm font-medium transition"
                                   >
                                     {opt.label || 'Option'} <ArrowRight size={14} />
                                   </button>
@@ -1348,7 +1356,7 @@ const Workflows = () => {
                               {run.path.map((p, i) => (
                                 <span
                                   key={`${p.stepId}-${i}`}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-background border border-border text-[11px] text-muted-foreground"
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/25 text-[11px] text-foreground/80"
                                 >
                                   <StepIcon type={p.type} className="w-3 h-3" />
                                   {p.title}
@@ -1414,7 +1422,7 @@ const Workflows = () => {
                           {run.path.map((p, i) => (
                             <div
                               key={`${p.stepId}-${i}`}
-                              className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-background border border-border"
+                              className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-secondary border border-border"
                             >
                               <span className="w-4 text-muted-foreground tabular-nums">{i + 1}</span>
                               <StepIcon type={p.type} />
@@ -1434,7 +1442,7 @@ const Workflows = () => {
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={startRun}
-                            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm transition"
+                            className="inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm shadow-lg shadow-primary/30 transition"
                           >
                             <RotateCcw size={14} /> Run again
                           </button>
