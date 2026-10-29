@@ -81,15 +81,24 @@ const createExampleWorkflow = (folderId) => ({
       title: 'Grab the umbrella',
       detail: 'It lives by the door.',
       optional: true,
+      next: 'ex-order',
       exception: { enabled: false, title: '', detail: '', goto: 'end' },
     },
-    { id: 'ex-walk', type: 'note', title: 'Enjoy the walk', detail: 'No headphones for the first ten minutes.', optional: false },
+    {
+      id: 'ex-walk',
+      type: 'note',
+      title: 'Enjoy the walk',
+      detail: 'No headphones for the first ten minutes.',
+      optional: false,
+      next: 'ex-order',
+    },
     {
       id: 'ex-order',
       type: 'task',
       title: 'Order coffee online',
       detail: 'Usual order, deliver to the desk.',
       optional: false,
+      next: 'ex-cal',
       exception: { enabled: false, title: '', detail: '', goto: 'end' },
     },
     { id: 'ex-cal', type: 'task', title: 'Check the calendar', detail: 'Skim today’s meetings.', optional: false, exception: { enabled: false, title: '', detail: '', goto: 'end' } },
@@ -107,6 +116,27 @@ const resolveGoto = (workflow, goto, currentStepId) => {
   if (goto === 'end') return null;
   return workflow.steps.some((s) => s.id === goto) ? goto : null;
 };
+
+// Where a step goes after it is completed.
+// Explicit `step.next` always wins. Without one: a step reached in the main
+// (linear) flow continues to the next step in the list, while a step reached
+// via a branch (decision choice or exception jump) ends the run — so taking
+// the "Yes" branch never falls through into the "No" branch's steps.
+const continuationFor = (workflow, step, viaBranch) => {
+  if (step.next === 'next') return nextStepId(workflow, step.id);
+  if (step.next === 'end') return null;
+  if (step.next) {
+    return workflow.steps.some((s) => s.id === step.next) ? step.next : null;
+  }
+  return viaBranch ? null : nextStepId(workflow, step.id);
+};
+
+const isBranchTarget = (workflow, stepId) =>
+  workflow.steps.some(
+    (s) =>
+      (s.options || []).some((o) => o.goto === stepId) ||
+      (s.exception && typeof s.exception === 'object' && s.exception.enabled && s.exception.goto === stepId),
+  );
 
 const formatDuration = (ms) => {
   if (ms == null) return '—';
@@ -141,6 +171,27 @@ const GotoSelect = ({ value, onChange, steps, currentStepId, excludeSelf = true 
     {steps
       .filter((s) => !excludeSelf || s.id !== currentStepId)
       .map((s, i) => (
+        <option key={s.id} value={s.id}>
+          ↳ Step {steps.findIndex((x) => x.id === s.id) + 1}: {s.title || 'Untitled'}
+        </option>
+      ))}
+  </select>
+);
+
+const ContinuationSelect = ({ value, onChange, steps, currentStepId, isBranchTargetStep }) => (
+  <select
+    value={value ?? ''}
+    onChange={(e) => onChange(e.target.value || undefined)}
+    className="bg-background border border-border rounded-md px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+  >
+    <option value="">
+      {isBranchTargetStep ? 'Auto — end the run here' : 'Auto — next step'}
+    </option>
+    <option value="next">→ Next step</option>
+    <option value="end">⚑ End workflow</option>
+    {steps
+      .filter((s) => s.id !== currentStepId)
+      .map((s) => (
         <option key={s.id} value={s.id}>
           ↳ Step {steps.findIndex((x) => x.id === s.id) + 1}: {s.title || 'Untitled'}
         </option>
@@ -315,6 +366,8 @@ const Workflows = () => {
   };
 
   const handleDuplicateWorkflow = (wf) => {
+    const idMap = new Map(wf.steps.map((s) => [s.id, makeId()]));
+    const remap = (v) => (v && idMap.has(v) ? idMap.get(v) : v);
     const clone = {
       ...JSON.parse(JSON.stringify(wf)),
       id: makeId(),
@@ -323,8 +376,14 @@ const Workflows = () => {
       updatedAt: Date.now(),
       steps: wf.steps.map((s) => ({
         ...JSON.parse(JSON.stringify(s)),
-        id: makeId(),
-        ...(s.options ? { options: s.options.map((o) => ({ ...o, id: makeId() })) } : {}),
+        id: idMap.get(s.id),
+        ...(s.next !== undefined ? { next: remap(s.next) } : { next: undefined }),
+        ...(s.options
+          ? { options: s.options.map((o) => ({ ...o, id: makeId(), goto: remap(o.goto) })) }
+          : {}),
+        ...(s.exception && typeof s.exception === 'object'
+          ? { exception: { ...s.exception, goto: remap(s.exception.goto) } }
+          : {}),
       })),
     };
     update((prev) => ({ ...prev, workflows: [...prev.workflows, clone] }));
@@ -354,20 +413,23 @@ const Workflows = () => {
   const handleDeleteStep = (stepId) => {
     if (!selected) return;
     mutateWorkflow(selected.id, (w) => {
-      const steps = w.steps.filter((s) => s.id !== stepId);
-      const sanitize = (goto) => (goto === stepId ? 'next' : goto);
-      return {
-        ...w,
-        steps: steps.map((s) => ({
-          ...s,
-          ...(s.options
-            ? { options: s.options.map((o) => ({ ...o, goto: sanitize(o.goto) })) }
-            : {}),
-          ...(s.exception && typeof s.exception === 'object'
-            ? { exception: { ...s.exception, goto: sanitize(s.exception.goto) } }
-            : {}),
-        })),
-      };
+      const steps = w.steps
+        .filter((s) => s.id !== stepId)
+        .map((s) => {
+          const sanitize = (goto) => (goto === stepId ? 'next' : goto);
+          const nextRef = s.next === stepId ? { next: undefined } : {};
+          return {
+            ...s,
+            ...nextRef,
+            ...(s.options
+              ? { options: s.options.map((o) => ({ ...o, goto: sanitize(o.goto) })) }
+              : {}),
+            ...(s.exception && typeof s.exception === 'object'
+              ? { exception: { ...s.exception, goto: sanitize(s.exception.goto) } }
+              : {}),
+          };
+        });
+      return { ...w, steps };
     });
   };
 
@@ -392,6 +454,7 @@ const Workflows = () => {
       finishedAt: null,
       currentId: selected.steps[0].id,
       path: [],
+      viaBranch: false,
       handler: null,
       outcome: null,
     });
@@ -427,10 +490,10 @@ const Workflows = () => {
       finishRun({ ...run, path }, 'loop-guard');
       return;
     }
-    const nextId =
-      kind === 'issue' || kind === 'choice'
-        ? resolveGoto(selected, goto, step.id)
-        : nextStepId(selected, step.id);
+    const branched = kind === 'issue' || kind === 'choice';
+    const nextId = branched
+      ? resolveGoto(selected, goto, step.id)
+      : continuationFor(selected, step, run.viaBranch);
     if (!nextId) {
       finishRun({ ...run, path }, 'completed');
       return;
@@ -439,6 +502,7 @@ const Workflows = () => {
       ...run,
       path,
       currentId: nextId,
+      viaBranch: branched ? true : run.viaBranch,
       handler: kind === 'issue' ? { title: step.exception?.title, detail: step.exception?.detail } : run.handler,
     });
   };
@@ -789,6 +853,8 @@ const Workflows = () => {
 
                     {selected.steps.map((step, i) => {
                       const meta = STEP_META[step.type] || STEP_META.task;
+                      const branchTarget = isBranchTarget(selected, step.id);
+                      const hasContinuation = step.type !== 'decision';
                       return (
                         <div
                           key={step.id}
@@ -807,6 +873,14 @@ const Workflows = () => {
                               <StepIcon type={step.type} />
                               {meta.label}
                             </span>
+                            {branchTarget && (
+                              <span
+                                className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-primary/40 bg-primary/10 text-primary text-[10px] font-medium whitespace-nowrap"
+                                title="A decision branch or exception jumps here"
+                              >
+                                <GitBranch size={10} /> branch target
+                              </span>
+                            )}
                             <div className="flex-1 min-w-0 space-y-2">
                               <input
                                 value={step.title}
@@ -848,6 +922,26 @@ const Workflows = () => {
                               </button>
                             </div>
                           </div>
+
+                          {/* continuation (task / note / exception) */}
+                          {hasContinuation && (
+                            <div className="pl-7 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <ArrowRight size={12} className="shrink-0" />
+                              <span>After this step</span>
+                              <ContinuationSelect
+                                value={step.next}
+                                onChange={(v) => handleUpdateStep(step.id, { next: v })}
+                                steps={selected.steps}
+                                currentStepId={step.id}
+                                isBranchTargetStep={branchTarget}
+                              />
+                              {branchTarget && !step.next && (
+                                <span className="text-[10px] text-muted-foreground/70">
+                                  (reached via a branch — ends the run unless continued)
+                                </span>
+                              )}
+                            </div>
+                          )}
 
                           {/* task options */}
                           {step.type === 'task' && (
@@ -1211,6 +1305,24 @@ const Workflows = () => {
                               </button>
                             )}
                           </div>
+
+                          {currentStep.type !== 'decision' &&
+                            (() => {
+                              const nextId = continuationFor(selected, currentStep, run.viaBranch);
+                              if (!nextId) {
+                                return (
+                                  <p className="text-xs text-muted-foreground">
+                                    After this: the run ends here.
+                                  </p>
+                                );
+                              }
+                              const target = selected.steps.find((s) => s.id === nextId);
+                              return (
+                                <p className="text-xs text-muted-foreground">
+                                  After this: {target?.title || 'next step'}
+                                </p>
+                              );
+                            })()}
                         </div>
 
                         {/* trail */}
