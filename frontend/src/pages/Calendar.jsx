@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import {
   ChevronLeft,
@@ -530,8 +531,8 @@ const CalendarEntryModal = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-background border border-border w-full max-w-xl max-h-[90vh] overflow-y-auto relative rounded-2xl shadow-2xl">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 border-b border-border">
           <div>
@@ -787,7 +788,8 @@ const CalendarEntryModal = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
@@ -797,8 +799,8 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent, onO
   const holidayItems = items.filter((item) => item.source === 'holiday');
   const taskItems = items.filter((item) => item.source === 'task');
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-3xl overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl">
         <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between border-b border-border">
           <div>
@@ -956,7 +958,8 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent, onO
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 
