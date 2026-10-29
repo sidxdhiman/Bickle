@@ -4,7 +4,7 @@ import {
   Search, CornerDownLeft, LayoutDashboard, CheckSquare, Calendar as CalendarIcon,
   FileText, Moon, DollarSign, Timer, Globe, Tally4, PenTool, FilePen, Palette,
   StickyNote, CalendarClock, Settings, ListTodo, Layers, Image, Video, Music,
-  PanelTop, Wallet,
+  PanelTop, Wallet, Workflow,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -21,6 +21,7 @@ const PAGE_ICONS = {
   dashboard: LayoutDashboard, tasks: CheckSquare, habits: Tally4, focus: Timer,
   calendar: CalendarIcon, notes: FileText, whiteboard: PenTool, 'pdf-editor': FilePen,
   sleep: Moon, money: DollarSign, translator: Globe, art: Palette, settings: Settings,
+  workflows: Workflow,
 };
 
 const TYPE_META = {

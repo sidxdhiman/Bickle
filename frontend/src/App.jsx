@@ -21,6 +21,7 @@ import Habits from './pages/Habits';
 import Whiteboard from './pages/Whiteboard';
 import PdfEditor from './pages/PdfEditor';
 import Art from './pages/Art';
+import Workflows from './pages/Workflows';
 import SidArt from './pages/SidArt';
 
 axios.defaults.baseURL = 'http://localhost:5000/api';
@@ -204,6 +205,7 @@ const App = () => {
             <Route path="focus" element={<RequireAccess pageKey="focus"><Focus /></RequireAccess>} />
             <Route path="settings" element={<RequireAccess pageKey="settings"><Settings /></RequireAccess>} />
             <Route path="translator" element={<RequireAccess pageKey="translator"><Translator /></RequireAccess>} />
+            <Route path="workflows" element={<RequireAccess pageKey="workflows"><Workflows /></RequireAccess>} />
             <Route path="habits" element={<RequireAccess pageKey="habits"><Habits /></RequireAccess>} />
             <Route path="whiteboard" element={<RequireAccess pageKey="whiteboard"><Whiteboard /></RequireAccess>} />
             <Route path="pdf-editor" element={<RequireAccess pageKey="pdf-editor"><PdfEditor /></RequireAccess>} />

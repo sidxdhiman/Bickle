@@ -10,6 +10,7 @@ const GRANTABLE_PAGE_KEYS = [
   'sleep',
   'money',
   'translator',
+  'workflows',
   'art',
 ];
 

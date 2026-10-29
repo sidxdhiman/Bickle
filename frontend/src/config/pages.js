@@ -11,6 +11,7 @@ import {
   PenTool,
   FilePen,
   Palette,
+  Workflow,
 } from 'lucide-react';
 
 export const PAGES = [
@@ -25,6 +26,7 @@ export const PAGES = [
   { key: 'sleep', label: 'Sleep', path: '/sleep', icon: Moon },
   { key: 'money', label: 'Money', path: '/money', icon: DollarSign },
   { key: 'translator', label: 'Translator', path: '/translator', icon: Globe },
+  { key: 'workflows', label: 'Workflows', path: '/workflows', icon: Workflow },
   { key: 'art', label: 'Art', path: '/art', icon: Palette },
 ];
 

@@ -50,8 +50,9 @@
 `WM:`        Tailwind CSS 3.4 — class-based theming
 `Theme:`     🟪 Dark Violet  ·  ☀️ Light
 `Icons:`     Lucide
-`Modules:`   11 — dashboard, tasks, habits, focus, calendar, notes,
-             whiteboard, pdf-editor, sleep, money, translator
+`Modules:`   13 — dashboard, tasks, habits, focus, calendar, notes,
+             whiteboard, pdf-editor, sleep, money, translator,
+             workflows, art
 `Dock:`      macOS-style, magnification + accent tint included
 `Wallpaper:` 8 gradient presets · custom uploads · auto accent extraction
 `Uptime:`    Always-on. No subscriptions. No bloat. No cloud lock-in.
@@ -86,6 +87,7 @@
 | 🌙 Sleep | Schedule calculator |
 | 💸 Money | Transactions, categories, history |
 | 🌐 Translator | Quick translations |
+| 🧭 Workflows | Step-by-step procedures with folders, if/else branches, exception handlers and an interactive runner |
 
 ## 🚀 Quick Start
 
