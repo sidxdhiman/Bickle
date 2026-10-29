@@ -7,7 +7,9 @@ import {
   Calendar as CalendarIcon,
   Clock,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  Gift,
+  Loader2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -192,9 +194,8 @@ const formatMinutesToTime = (minutes) => {
 };
 
 const sortCalendarItems = (items) => items.slice().sort((a, b) => {
-  if (a.source !== b.source) {
-    return a.source === 'event' ? -1 : 1;
-  }
+  const rank = (source) => (source === 'event' ? 0 : source === 'holiday' ? 1 : 2);
+  if (rank(a.source) !== rank(b.source)) return rank(a.source) - rank(b.source);
   return new Date(a.start) - new Date(b.start);
 });
 
@@ -222,6 +223,166 @@ const createTaskEvents = (tasks) => {
         dueDate: task.dueDate,
       };
     });
+};
+
+// ---------- auto-imported public holidays (Nager.Date + caldays, no key) ----------
+const HOLIDAY_SETTINGS_KEY = 'bickle-calendar-holidays';
+const HOLIDAY_CACHE_KEY = 'bickle-calendar-holiday-cache';
+const HOLIDAY_TTL_MS = 24 * 60 * 60 * 1000;
+const HOLIDAY_COLOR = '#0d9488';
+
+const HOLIDAY_COUNTRIES = [
+  { code: 'IN', name: 'India' },
+  { code: 'US', name: 'United States' },
+  { code: 'GB', name: 'United Kingdom' },
+  { code: 'CA', name: 'Canada' },
+  { code: 'AU', name: 'Australia' },
+  { code: 'NZ', name: 'New Zealand' },
+  { code: 'SG', name: 'Singapore' },
+  { code: 'AE', name: 'United Arab Emirates' },
+  { code: 'DE', name: 'Germany' },
+  { code: 'FR', name: 'France' },
+  { code: 'IT', name: 'Italy' },
+  { code: 'ES', name: 'Spain' },
+  { code: 'JP', name: 'Japan' },
+  { code: 'BR', name: 'Brazil' },
+  { code: 'ZA', name: 'South Africa' },
+];
+
+const loadHolidaySettings = () => {
+  try {
+    const raw = localStorage.getItem(HOLIDAY_SETTINGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        enabled: parsed.enabled !== false,
+        countryCode: typeof parsed.countryCode === 'string' ? parsed.countryCode : 'IN',
+      };
+    }
+  } catch (error) {
+    // Corrupt settings fall back to defaults.
+  }
+  return { enabled: true, countryCode: 'IN' };
+};
+
+const saveHolidaySettings = (settings) => {
+  try {
+    localStorage.setItem(HOLIDAY_SETTINGS_KEY, JSON.stringify(settings));
+  } catch (error) {
+    // Storage unavailable; settings still apply for this session.
+  }
+};
+
+const loadHolidayCache = () => {
+  try {
+    const raw = localStorage.getItem(HOLIDAY_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object') return parsed;
+    }
+  } catch (error) {
+    // Corrupt cache is ignored and refetched.
+  }
+  return {};
+};
+
+const saveHolidayCache = (cache) => {
+  try {
+    localStorage.setItem(HOLIDAY_CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    // Best effort — in-memory cache still works this session.
+  }
+};
+
+const holidayCacheFresh = (cache, country, year) => {
+  const entry = cache[`${country}:${year}`];
+  return !!entry && Array.isArray(entry.holidays) && Date.now() - entry.fetchedAt < HOLIDAY_TTL_MS;
+};
+
+// Plain fetch so the app's axios auth headers never leak to third parties.
+const fetchHolidayJson = async (url) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const text = await res.text();
+  return text ? JSON.parse(text) : null; // Nager.Date answers 204 for unknown countries
+};
+
+// Fetches public holidays per country+year, cached in localStorage for 24h.
+// Primary: Nager.Date (any year, no key). Fallback: caldays.com (current-year
+// data for countries Nager lacks, e.g. India). Empty-but-answered years are
+// cached too, so unsupported years are not re-requested on every navigation.
+const fetchHolidayYears = async (country, years) => {
+  const cache = loadHolidayCache();
+  const missing = years.filter((year) => !holidayCacheFresh(cache, country, year));
+  if (missing.length) {
+    let allFailed = true;
+    await Promise.all(
+      missing.map(async (year) => {
+        let holidays = null;
+        let sawResponse = false;
+        try {
+          const data = await fetchHolidayJson(
+            `https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`,
+          );
+          sawResponse = true;
+          if (Array.isArray(data)) {
+            const list = data
+              .filter((h) => h && h.date && (!h.types || h.types.includes('Public')))
+              .map((h) => ({ date: h.date, name: h.localName || h.name || 'Holiday' }));
+            if (list.length) holidays = list;
+          }
+        } catch (error) {
+          // Network/HTTP failure — try the fallback below.
+        }
+        if (!holidays) {
+          try {
+            const payload = await fetchHolidayJson(`https://caldays.com/api/holidays/${country}`);
+            sawResponse = true;
+            if (payload && payload.year === year && Array.isArray(payload.holidays)) {
+              holidays = payload.holidays
+                .filter((h) => h && h.date)
+                .map((h) => ({ date: h.date, name: h.name || 'Holiday' }));
+            }
+          } catch (error) {
+            // Network/HTTP failure.
+          }
+        }
+        if (sawResponse) {
+          allFailed = false;
+          cache[`${country}:${year}`] = { holidays: holidays || [], fetchedAt: Date.now() };
+        }
+      }),
+    );
+    if (allFailed) throw new Error('All holiday sources unreachable');
+    saveHolidayCache(cache);
+  }
+  return cache;
+};
+
+const createHolidayEvents = (cache, country, rangeStart, rangeEnd) => {
+  const items = [];
+  for (let year = rangeStart.getFullYear(); year <= rangeEnd.getFullYear(); year += 1) {
+    const entry = cache[`${country}:${year}`];
+    if (!entry || !Array.isArray(entry.holidays)) continue;
+    entry.holidays.forEach((holiday, index) => {
+      if (!holiday.date) return;
+      const date = startOfDay(new Date(`${holiday.date}T00:00:00`));
+      if (Number.isNaN(date.getTime()) || date.getFullYear() !== year) return;
+      items.push({
+        id: `holiday-${country}-${holiday.date}-${index}`,
+        title: holiday.name || 'Holiday',
+        start: date,
+        end: endOfDay(date),
+        allDay: true,
+        color: HOLIDAY_COLOR,
+        source: 'holiday',
+        readOnly: true,
+        location: '',
+        description: 'Public holiday',
+      });
+    });
+  }
+  return items;
 };
 
 const CalendarEntryModal = ({
@@ -630,9 +791,10 @@ const CalendarEntryModal = ({
   );
 };
 
-const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) => {
+const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent, onOpenTask }) => {
   if (!isOpen || !date) return null;
   const eventItems = items.filter((item) => item.source === 'event');
+  const holidayItems = items.filter((item) => item.source === 'holiday');
   const taskItems = items.filter((item) => item.source === 'task');
 
   return (
@@ -713,6 +875,58 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent }) =
             )}
           </div>
 
+          {holidayItems.length > 0 && (
+            <div className="rounded-2xl border border-border bg-secondary/50 p-4">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Holidays</p>
+                  <p className="text-xs text-muted-foreground">
+                    {holidayItems.length} public holiday{holidayItems.length === 1 ? '' : 's'} · auto-imported ·{' '}
+                    <a
+                      href="https://caldays.com"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      caldays
+                    </a>{' '}
+                    &amp;{' '}
+                    <a
+                      href="https://date.nager.at"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      nager.date
+                    </a>{' '}
+                    (CC BY 4.0)
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {holidayItems.map((item) => (
+                  <div key={item.id || `${item.title}-${item.start}`} className="rounded-2xl border border-border bg-background p-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-foreground flex items-center gap-2">
+                          <Gift className="w-4 h-4 shrink-0" style={{ color: HOLIDAY_COLOR }} />
+                          {item.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                      </div>
+                      <span
+                        className="rounded-full px-3 py-1 text-xs font-semibold text-white shrink-0"
+                        style={{ backgroundColor: HOLIDAY_COLOR }}
+                      >
+                        All day
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-border bg-secondary/50 p-4">
             <div className="flex items-center justify-between gap-4 mb-4">
               <div>
@@ -758,6 +972,9 @@ const CalendarPage = () => {
   const [selectedDate, setSelectedDate] = useState(today);
   const [editingEvent, setEditingEvent] = useState(null);
   const [loading, setLoading] = useState(() => !peek('calendar'));
+  const [holidaySettings, setHolidaySettings] = useState(loadHolidaySettings);
+  const [holidayCache, setHolidayCache] = useState(loadHolidayCache);
+  const [holidayStatus, setHolidayStatus] = useState('ready');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -816,10 +1033,69 @@ const CalendarPage = () => {
 
   const [rangeStart, rangeEnd] = getViewRange(currentDate, view);
   const visibleEvents = events.flatMap((event) => buildRecurringOccurrences(event, rangeStart, rangeEnd));
-  const allItems = sortCalendarItems([...visibleEvents.map((event) => ({ ...event, source: 'event' })), ...createTaskEvents(tasks)]);
+  const holidayItems = holidaySettings.enabled
+    ? createHolidayEvents(holidayCache, holidaySettings.countryCode, rangeStart, rangeEnd)
+    : [];
+  const allItems = sortCalendarItems([
+    ...visibleEvents.map((event) => ({ ...event, source: 'event' })),
+    ...holidayItems,
+    ...createTaskEvents(tasks),
+  ]);
 
   const getItemsForDate = (date) =>
     allItems.filter((item) => isInRange(date, item.start, item.end));
+
+  // Pull public holidays for whatever years are on screen (cached 24h)
+  useEffect(() => {
+    if (!holidaySettings.enabled) {
+      setHolidayStatus('ready');
+      return undefined;
+    }
+    let cancelled = false;
+    const years = [...new Set([rangeStart.getFullYear(), rangeEnd.getFullYear()])];
+    const missing = years.filter((year) => !holidayCacheFresh(holidayCache, holidaySettings.countryCode, year));
+    if (!missing.length) {
+      setHolidayStatus('ready');
+      return undefined;
+    }
+    setHolidayStatus('loading');
+    (async () => {
+      try {
+        const next = await fetchHolidayYears(holidaySettings.countryCode, missing);
+        if (!cancelled) {
+          setHolidayCache(next);
+          setHolidayStatus('ready');
+        }
+      } catch (error) {
+        if (!cancelled) setHolidayStatus('error');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    holidaySettings.enabled,
+    holidaySettings.countryCode,
+    holidayCache,
+    rangeStart.getTime(),
+    rangeEnd.getTime(),
+  ]);
+
+  const toggleHolidays = () => {
+    setHolidaySettings((prev) => {
+      const next = { ...prev, enabled: !prev.enabled };
+      saveHolidaySettings(next);
+      return next;
+    });
+  };
+
+  const changeHolidayCountry = (countryCode) => {
+    setHolidaySettings((prev) => {
+      const next = { ...prev, countryCode };
+      saveHolidaySettings(next);
+      return next;
+    });
+  };
 
   const handlePrev = () => {
     setCurrentDate((prev) => {
@@ -871,6 +1147,10 @@ const CalendarPage = () => {
   };
 
   const handleItemClick = (item) => {
+    if (item.source === 'holiday') {
+      // Read-only: let the click fall through to the day details modal.
+      return;
+    }
     if (item.source === 'task' && item.taskId) {
       openTaskInList(item.taskId);
     } else if (item.source === 'event') {
@@ -982,6 +1262,43 @@ const CalendarPage = () => {
                 </button>
               ))}
             </div>
+            <div className="flex items-center gap-2 rounded-full bg-secondary p-1 border border-border">
+              <button
+                onClick={toggleHolidays}
+                title="Automatically show public holidays for your country"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition-all',
+                  holidaySettings.enabled
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Gift className="w-4 h-4" />
+                Holidays
+              </button>
+              {holidaySettings.enabled && (
+                <select
+                  value={holidaySettings.countryCode}
+                  onChange={(e) => changeHolidayCountry(e.target.value)}
+                  className="max-w-[130px] bg-transparent text-sm px-2 py-1 rounded-full text-foreground focus:outline-none border-l border-border"
+                  title="Holiday country"
+                >
+                  {HOLIDAY_COUNTRIES.map((country) => (
+                    <option key={country.code} value={country.code}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {holidaySettings.enabled && holidayStatus === 'loading' && (
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            )}
+            {holidaySettings.enabled && holidayStatus === 'error' && (
+              <span className="text-xs text-amber-500" title="Could not reach the holiday service — will retry on navigation">
+                Holidays offline
+              </span>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
@@ -1140,7 +1457,12 @@ const CalendarPage = () => {
                             <Clock className="w-3 h-3" />
                             <span>{item.allDay ? 'All day' : `${new Date(item.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(item.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}</span>
                           </div>
-                          <p className="mt-2 text-sm font-semibold text-foreground">{item.title}</p>
+                          <p className="mt-2 text-sm font-semibold text-foreground flex items-center gap-1.5">
+                            {item.source === 'holiday' && (
+                              <Gift className="w-3.5 h-3.5 shrink-0" style={{ color: HOLIDAY_COLOR }} />
+                            )}
+                            {item.title}
+                          </p>
                           <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                         </button>
                       )) : (
@@ -1169,8 +1491,15 @@ const CalendarPage = () => {
                   <button key={item._id || item.id || `${item.title}-${currentDate.toISOString()}` } type="button" onClick={() => handleItemClick(item)} className="rounded-2xl border border-border bg-secondary/70 p-5 text-left w-full">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">{item.source === 'task' ? 'Task deadline' : item.location}</p>
+                        <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                          {item.source === 'holiday' && (
+                            <Gift className="w-3.5 h-3.5 shrink-0" style={{ color: HOLIDAY_COLOR }} />
+                          )}
+                          {item.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.source === 'task' ? 'Task deadline' : item.source === 'holiday' ? 'Public holiday' : item.location}
+                        </p>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">

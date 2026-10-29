@@ -204,7 +204,7 @@ const Workflows = () => {
   const { folders, workflows, runs } = state;
 
   const [selectedWorkflowId, setSelectedWorkflowId] = useState(null);
-  const [mode, setMode] = useState('builder');
+  const [runOpen, setRunOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [editingFolderId, setEditingFolderId] = useState(null);
   const [folderDraft, setFolderDraft] = useState('');
@@ -237,7 +237,7 @@ const Workflows = () => {
   useEffect(() => {
     if (selected && folder && selected.folderId !== folder.id) {
       setSelectedWorkflowId(null);
-      setMode('builder');
+      setRunOpen(false);
       setRun(null);
     }
   }, [folder, selected]);
@@ -320,7 +320,7 @@ const Workflows = () => {
     });
     if (workflowIds.has(selectedWorkflowId)) {
       setSelectedWorkflowId(null);
-      setMode('builder');
+      setRunOpen(false);
       setRun(null);
     }
   };
@@ -338,7 +338,6 @@ const Workflows = () => {
     };
     update((prev) => ({ ...prev, workflows: [...prev.workflows, wf] }));
     setSelectedWorkflowId(wf.id);
-    setMode('builder');
     setRun(null);
   };
 
@@ -347,7 +346,6 @@ const Workflows = () => {
     const wf = createExampleWorkflow(folder.id);
     update((prev) => ({ ...prev, workflows: [...prev.workflows, wf] }));
     setSelectedWorkflowId(wf.id);
-    setMode('builder');
     setRun(null);
   };
 
@@ -360,7 +358,7 @@ const Workflows = () => {
     }));
     if (selectedWorkflowId === id) {
       setSelectedWorkflowId(null);
-      setMode('builder');
+      setRunOpen(false);
       setRun(null);
     }
   };
@@ -512,6 +510,16 @@ const Workflows = () => {
     else setRun(null);
   };
 
+  const closeRunModal = () => {
+    if (run && !run.finishedAt && run.path.length > 0) {
+      const ok = window.confirm('Abandon the current run and close?');
+      if (!ok) return;
+      finishRun(run, 'abandoned');
+    }
+    setRunOpen(false);
+    setRun(null);
+  };
+
   const currentStep = run && selected ? selected.steps.find((s) => s.id === run.currentId) : null;
   const visitedIds = useMemo(() => new Set((run?.path || []).map((p) => p.stepId)), [run]);
   const progressPct = selected?.steps.length
@@ -525,7 +533,7 @@ const Workflows = () => {
 
   const openWorkflow = (wf) => {
     setSelectedWorkflowId(wf.id);
-    setMode('builder');
+    setRunOpen(false);
     setRun(null);
   };
 
@@ -630,8 +638,8 @@ const Workflows = () => {
                       onClick={() => {
                         update((prev) => ({ ...prev, selectedFolderId: f.id }));
                         setSelectedWorkflowId(null);
+                        setRunOpen(false);
                         setRun(null);
-                        setMode('builder');
                       }}
                       className={cn(
                         'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition group',
@@ -811,40 +819,25 @@ const Workflows = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 bg-background border border-border rounded-lg p-1">
-                    <button
-                      onClick={() => {
-                        setMode('builder');
-                        setRun(null);
-                      }}
-                      className={cn(
-                        'px-3 py-1.5 rounded-md text-xs font-medium transition',
-                        mode === 'builder' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      <Pencil size={12} className="inline mr-1 -mt-0.5" />
-                      Builder
-                    </button>
-                    <button
-                      onClick={() => setMode('runner')}
-                      disabled={!selected.steps.length}
-                      className={cn(
-                        'px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1',
-                        mode === 'runner' && !run?.finishedAt
-                          ? 'bg-primary text-primary-foreground'
-                          : 'text-muted-foreground hover:text-foreground',
-                        !selected.steps.length && 'opacity-40 cursor-not-allowed',
-                      )}
-                    >
-                      <Play size={12} />
-                      Run
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => {
+                      setRun(null);
+                      setRunOpen(true);
+                    }}
+                    disabled={!selected.steps.length}
+                    className={cn(
+                      'inline-flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm font-medium transition',
+                      !selected.steps.length && 'opacity-40 cursor-not-allowed',
+                    )}
+                    title={selected.steps.length ? 'Run this workflow' : 'Add a step first'}
+                  >
+                    <Play size={15} />
+                    Run
+                  </button>
                 </div>
 
                 {/* ---------- builder ---------- */}
-                {mode === 'builder' && (
-                  <div className="pt-4 space-y-3">
+                <div className="pt-4 space-y-3">
                     {selected.steps.length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-6">
                         No steps yet. Add your first step below.
@@ -1163,11 +1156,30 @@ const Workflows = () => {
                       </div>
                     )}
                   </div>
-                )}
 
-                {/* ---------- runner ---------- */}
-                {mode === 'runner' && (
-                  <div className="pt-4">
+                {/* ---------- runner (opens as a modal) ---------- */}
+                {runOpen && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <div
+                      className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                      onClick={closeRunModal}
+                    />
+                    <div className="relative w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl bg-secondary border border-border shadow-2xl">
+                      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-4 border-b border-border bg-secondary">
+                        <div className="min-w-0">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Workflow run</p>
+                          <h2 className="font-semibold truncate">{selected.title}</h2>
+                        </div>
+                        <button
+                          onClick={closeRunModal}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition"
+                          title="Close run"
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                      <div className="p-5">
+                        <div>
                     {!run && (
                       <div className="text-center py-14 space-y-4">
                         <Play className="w-10 h-10 text-primary mx-auto" />
@@ -1427,7 +1439,7 @@ const Workflows = () => {
                           </button>
                           <button
                             onClick={() => {
-                              setMode('builder');
+                              setRunOpen(false);
                               setRun(null);
                             }}
                             className="inline-flex items-center gap-2 bg-accent hover:bg-accent/70 px-4 py-2 rounded-lg text-sm transition"
@@ -1451,6 +1463,9 @@ const Workflows = () => {
                         </button>
                       </div>
                     )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>
