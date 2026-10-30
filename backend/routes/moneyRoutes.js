@@ -9,6 +9,8 @@ router.use(protect);
 // Transaction routes
 router.post('/transactions', moneyController.addTransaction);
 router.get('/transactions', moneyController.getMonthlyTransactions);
+// Recent transactions across months (used by the grant-access item picker).
+router.get('/transactions/all', moneyController.getAllTransactions);
 router.put('/transactions/:id', moneyController.updateTransaction);
 router.delete('/transactions/:id', moneyController.deleteTransaction);
 

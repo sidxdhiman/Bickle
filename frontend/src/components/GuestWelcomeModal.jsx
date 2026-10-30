@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Clock, CheckCircle2, LogOut, X } from 'lucide-react';
+import { Shield, Clock, CheckCircle2, LogOut, X, Paperclip } from 'lucide-react';
 import { PAGES } from '../config/pages';
 
 const formatRemaining = (expiresAt) => {
@@ -13,7 +13,7 @@ const formatRemaining = (expiresAt) => {
   return `${mins}m ${secs.toString().padStart(2, '0')}s`;
 };
 
-const GuestWelcomeModal = ({ allowedPages, expiresAt, onClose, onEnd }) => {
+const GuestWelcomeModal = ({ allowedPages, sharedItems = [], expiresAt, onClose, onEnd }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -64,6 +64,29 @@ const GuestWelcomeModal = ({ allowedPages, expiresAt, onClose, onEnd }) => {
               Everything else stays hidden and locked. Please use this access responsibly and only for what it was shared for.
             </p>
           </div>
+
+          {sharedItems.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold mb-2">Shared with you</p>
+              <div className="space-y-1">
+                {sharedItems.slice(0, 8).map((item, idx) => (
+                  <div
+                    key={`${item.itemId}-${idx}`}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/25 bg-primary/5 text-sm"
+                  >
+                    <Paperclip className="w-3.5 h-3.5 text-primary shrink-0" />
+                    <span className="flex-1 truncate">{item.title || 'Shared item'}</span>
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {PAGES.find((page) => page.key === item.page)?.label || item.page}
+                    </span>
+                  </div>
+                ))}
+                {sharedItems.length > 8 && (
+                  <p className="text-xs text-muted-foreground">+{sharedItems.length - 8} more inside</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 p-5 sm:p-6 border-t border-border">

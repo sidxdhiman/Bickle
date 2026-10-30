@@ -3,11 +3,16 @@ const jwt = require('jsonwebtoken');
 const GuestSession = require('../models/GuestSession');
 const { GRANTABLE_PAGE_KEYS } = require('../config/pages');
 const { purgeGuestData } = require('../utils/purgeGuestSession');
+const { cloneSharedItems } = require('../utils/cloneSharedItems');
+
+const serializeSharedItems = (items) =>
+  (items || []).map((item) => ({ page: item.page, itemId: item.itemId, title: item.title }));
 
 const serialize = (session) => ({
   _id: session._id,
   label: session.label,
   allowedPages: session.allowedPages,
+  sharedItems: serializeSharedItems(session.sharedItems),
   token: session.token,
   expiresAt: session.expiresAt,
   active: session.active && session.expiresAt.getTime() > Date.now(),
@@ -26,6 +31,24 @@ exports.createSession = async (req, res) => {
     const pages = Array.isArray(allowedPages)
       ? allowedPages.filter((page) => GRANTABLE_PAGE_KEYS.includes(page))
       : [];
+
+    // Specific items to copy into the guest's session ({ page, itemId }).
+    const rawItems = Array.isArray(req.body.sharedItems) ? req.body.sharedItems : [];
+    const seen = new Set();
+    const items = [];
+    for (const raw of rawItems) {
+      if (!raw || !GRANTABLE_PAGE_KEYS.includes(raw.page)) continue;
+      if (!mongoose.isValidObjectId(raw.itemId)) continue;
+      const key = `${raw.page}:${String(raw.itemId)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push({ page: raw.page, itemId: raw.itemId });
+    }
+    // Sharing items implies the module itself is enabled.
+    for (const page of items.map((i) => i.page)) {
+      if (!pages.includes(page)) pages.push(page);
+    }
+
     if (pages.length === 0) {
       return res.status(400).json({ message: 'Select at least one module to share' });
     }
@@ -46,6 +69,19 @@ exports.createSession = async (req, res) => {
       token,
       expiresAt,
     });
+
+    if (items.length) {
+      // Copies land in the guest partition and are wiped when the session ends.
+      const sharedItems = await cloneSharedItems({
+        ownerId: req.user._id,
+        sessionId,
+        items,
+      });
+      if (sharedItems.length) {
+        session.sharedItems = sharedItems;
+        await session.save();
+      }
+    }
 
     res.status(201).json(serialize(session));
   } catch (error) {
@@ -92,6 +128,11 @@ exports.getSession = async (req, res) => {
 
     res.json({
       allowedPages: session.allowedPages,
+      sharedItems: (session.sharedItems || []).map((s) => ({
+        page: s.page,
+        itemId: s.itemId,
+        title: s.title,
+      })),
       expiresAt: session.expiresAt,
       label: session.label,
       active: true,

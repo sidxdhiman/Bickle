@@ -100,6 +100,7 @@ const App = () => {
           const guestData = {
             token: guestToken,
             allowedPages: res.data.allowedPages,
+            sharedItems: res.data.sharedItems || [],
             expiresAt: res.data.expiresAt,
           };
           localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(guestData));
@@ -217,6 +218,7 @@ const App = () => {
       {guest && showGuestWelcome && (
         <GuestWelcomeModal
           allowedPages={guest.allowedPages}
+          sharedItems={guest.sharedItems || []}
           expiresAt={guest.expiresAt}
           onClose={() => setShowGuestWelcome(false)}
           onEnd={endGuest}

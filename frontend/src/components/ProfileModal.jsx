@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, LogOut, Copy, Check, Clock, Shield, User, Link2, RefreshCw, CheckCircle2, Ban } from 'lucide-react';
+import { X, LogOut, Copy, Check, Clock, Shield, User, Link2, RefreshCw, CheckCircle2, Ban, Paperclip, ChevronDown, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -13,6 +13,90 @@ function cn(...inputs) {
 }
 
 const DURATION_PRESETS = [5, 10, 30, 60];
+
+// Pages whose items can be picked and copied into the guest session.
+// Focus, Translator, Workflows and PDF Editor hold no server-side items.
+const SHAREABLE_PAGES = {
+  notes: {
+    label: 'Notes',
+    load: async () => {
+      const res = await axios.get('/notes');
+      return res.data.map((n) => ({ id: n._id, title: n.title || 'Untitled Note', meta: n.category }));
+    },
+  },
+  tasks: {
+    label: 'Tasks',
+    load: async () => {
+      const [tasksRes, listsRes] = await Promise.all([axios.get('/tasks'), axios.get('/lists')]);
+      const listName = Object.fromEntries((listsRes.data || []).map((l) => [l._id, l.name]));
+      return (tasksRes.data || []).map((t) => ({ id: t._id, title: t.title, meta: listName[t.list] }));
+    },
+  },
+  calendar: {
+    label: 'Calendar',
+    load: async () => {
+      const res = await axios.get('/calendar');
+      return (res.data || []).map((e) => ({
+        id: e._id,
+        title: e.title,
+        meta: new Date(e.start).toLocaleDateString(),
+      }));
+    },
+  },
+  habits: {
+    label: 'Habits',
+    load: async () => {
+      const res = await axios.get('/habits');
+      return (res.data || []).map((h) => ({ id: h._id, title: h.name, meta: h.frequency }));
+    },
+  },
+  sleep: {
+    label: 'Sleep',
+    load: async () => {
+      const res = await axios.get('/sleep');
+      return (res.data || []).map((s) => ({
+        id: s._id,
+        title: `Sleep · ${new Date(s.date).toLocaleDateString()}`,
+        meta: s.quality || '',
+      }));
+    },
+  },
+  money: {
+    label: 'Money',
+    load: async () => {
+      const res = await axios.get('/money/transactions/all');
+      return (res.data || []).map((t) => ({
+        id: t._id,
+        title: t.description || t.category,
+        meta: `${t.type === 'income' ? '+' : '−'}${t.amount}`,
+      }));
+    },
+  },
+  whiteboard: {
+    label: 'Whiteboards',
+    load: async () => {
+      const res = await axios.get('/whiteboards');
+      return (res.data || []).map((w) => ({ id: w._id, title: w.title || 'Untitled Board' }));
+    },
+  },
+  art: {
+    label: 'Art',
+    load: async () => {
+      const [blogs, photos, videos, music] = await Promise.all([
+        axios.get('/art/blogs'),
+        axios.get('/art/photos'),
+        axios.get('/art/videos'),
+        axios.get('/art/music'),
+      ]);
+      return [
+        ...(blogs.data || []).map((d) => ({ id: d._id, title: d.title || 'Untitled blog', meta: 'Blog' })),
+        ...(photos.data || []).map((d) => ({ id: d._id, title: d.title || d.name || 'Photo', meta: 'Photo' })),
+        ...(videos.data || []).map((d) => ({ id: d._id, title: d.title || d.name || 'Video', meta: 'Video' })),
+        ...(music.data || []).map((d) => ({ id: d._id, title: d.title || d.name || 'Track', meta: 'Music' })),
+      ];
+    },
+  },
+};
 
 const formatRemaining = (expiresAt) => {
   const ms = new Date(expiresAt).getTime() - Date.now();
@@ -45,6 +129,12 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const [createError, setCreateError] = useState('');
   const [createdLink, setCreatedLink] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Per-item sharing: { [pageKey]: [itemId] } + lazily loaded picker catalogs
+  const [itemSelections, setItemSelections] = useState({});
+  const [openPicker, setOpenPicker] = useState(null);
+  const [pickerCatalogs, setPickerCatalogs] = useState({});
+  const [pickerSearch, setPickerSearch] = useState('');
 
   // Sessions
   const [sessions, setSessions] = useState([]);
@@ -124,7 +214,52 @@ const ProfileModal = ({ isOpen, onClose }) => {
   };
 
   const togglePage = (key) => {
-    setPages((prev) => (prev.includes(key) ? prev.filter((p) => p !== key) : [...prev, key]));
+    setPages((prev) => {
+      if (prev.includes(key)) {
+        // Deselecting a module also clears any items picked inside it.
+        setItemSelections((items) => {
+          if (!items[key]) return items;
+          const next = { ...items };
+          delete next[key];
+          return next;
+        });
+        return prev.filter((p) => p !== key);
+      }
+      return [...prev, key];
+    });
+  };
+
+  const toggleItem = (pageKey, itemId) => {
+    setItemSelections((prev) => {
+      const current = prev[pageKey] || [];
+      return {
+        ...prev,
+        [pageKey]: current.includes(itemId)
+          ? current.filter((id) => id !== itemId)
+          : [...current, itemId],
+      };
+    });
+  };
+
+  const toggleItemPicker = async (pageKey) => {
+    setPickerSearch('');
+    if (openPicker === pageKey) {
+      setOpenPicker(null);
+      return;
+    }
+    setOpenPicker(pageKey);
+    if (pickerCatalogs[pageKey]) return;
+    setPickerCatalogs((prev) => ({ ...prev, [pageKey]: { items: [], loading: true, error: '' } }));
+    try {
+      const items = await SHAREABLE_PAGES[pageKey].load();
+      setPickerCatalogs((prev) => ({ ...prev, [pageKey]: { items, loading: false, error: '' } }));
+    } catch (error) {
+      console.error('Error loading shareable items:', error);
+      setPickerCatalogs((prev) => ({
+        ...prev,
+        [pageKey]: { items: [], loading: false, error: 'Could not load your items.' },
+      }));
+    }
   };
 
   const handleCreate = async (e) => {
@@ -134,18 +269,31 @@ const ProfileModal = ({ isOpen, onClose }) => {
       setCreateError('Select at least one module to share.');
       return;
     }
+    const sharedItems = [];
+    for (const [pageKey, ids] of Object.entries(itemSelections)) {
+      if (!pages.includes(pageKey)) continue;
+      const catalog = pickerCatalogs[pageKey]?.items || [];
+      for (const id of ids || []) {
+        const found = catalog.find((item) => item.id === id);
+        sharedItems.push({ page: pageKey, itemId: id, title: found?.title || '' });
+      }
+    }
     setCreating(true);
     try {
       const res = await axios.post('/guest', {
         label: label.trim() || 'Guest',
         durationMinutes: Number(duration),
         allowedPages: pages,
+        sharedItems,
       });
       const link = `${window.location.origin}/guest/${res.data.token}`;
       setCreatedLink(link);
       setSessions((prev) => [res.data, ...prev]);
       setLabel('');
       setPages([]);
+      setItemSelections({});
+      setOpenPicker(null);
+      setPickerCatalogs({});
     } catch (error) {
       console.error('Error creating session:', error);
       setCreateError(error.response?.data?.message || 'Failed to create access link.');
@@ -333,6 +481,112 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 <p className="text-xs text-muted-foreground mt-2">Everything not selected will be hidden and blocked for them.</p>
               </div>
 
+              {pages.some((key) => SHAREABLE_PAGES[key]) && (
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Share specific items (optional)</label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Pick items to copy into their session — like a particular note. Leave empty to give them a fresh, empty workspace.
+                  </p>
+                  <div className="space-y-2">
+                    {pages.filter((key) => SHAREABLE_PAGES[key]).map((key) => {
+                      const meta = SHAREABLE_PAGES[key];
+                      const selected = itemSelections[key] || [];
+                      const open = openPicker === key;
+                      const catalog = pickerCatalogs[key];
+                      const visibleItems = (catalog?.items || []).filter(
+                        (item) =>
+                          !pickerSearch ||
+                          (item.title || '').toLowerCase().includes(pickerSearch.toLowerCase())
+                      );
+                      return (
+                        <div key={key} className="border border-border rounded-lg overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => toggleItemPicker(key)}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent/50 transition-colors"
+                          >
+                            <ChevronDown
+                              className={cn('w-4 h-4 shrink-0 text-muted-foreground transition-transform', open ? 'rotate-0' : '-rotate-90')}
+                            />
+                            <span className="font-medium">{meta.label}</span>
+                            {selected.length > 0 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold">
+                                {selected.length} selected
+                              </span>
+                            )}
+                            <span className="ml-auto text-xs text-muted-foreground shrink-0">
+                              {selected.length ? 'Items shared' : 'Empty workspace'}
+                            </span>
+                          </button>
+                          {open && (
+                            <div className="border-t border-border bg-secondary/20 p-2 max-h-52 overflow-y-auto space-y-1">
+                              {catalog?.loading && (
+                                <p className="text-xs text-muted-foreground flex items-center gap-2 p-2">
+                                  <Loader2 className="w-3 h-3 animate-spin" /> Loading your items…
+                                </p>
+                              )}
+                              {catalog?.error && (
+                                <p className="text-xs text-destructive p-2">{catalog.error}</p>
+                              )}
+                              {!catalog?.loading && !catalog?.error && (catalog?.items || []).length === 0 && (
+                                <p className="text-xs text-muted-foreground p-2">Nothing here yet.</p>
+                              )}
+                              {!catalog?.loading && !catalog?.error && (catalog?.items || []).length > 0 && (
+                                <>
+                                  <div className="flex items-center gap-2 px-1 pb-1">
+                                    <input
+                                      value={pickerSearch}
+                                      onChange={(e) => setPickerSearch(e.target.value)}
+                                      placeholder="Search items…"
+                                      className="flex-1 px-2 py-1 text-xs bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setItemSelections((prev) => ({
+                                          ...prev,
+                                          [key]:
+                                            selected.length === catalog.items.length
+                                              ? []
+                                              : catalog.items.map((item) => item.id),
+                                        }))
+                                      }
+                                      className="shrink-0 text-[11px] text-primary hover:underline"
+                                    >
+                                      {selected.length === catalog.items.length ? 'Clear' : 'Select all'}
+                                    </button>
+                                  </div>
+                                  {visibleItems.map((item) => (
+                                    <label
+                                      key={item.id}
+                                      className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-accent/40 cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selected.includes(item.id)}
+                                        onChange={() => toggleItem(key, item.id)}
+                                        className="rounded border-border"
+                                      />
+                                      <span className="flex-1 truncate">{item.title}</span>
+                                      {item.meta && (
+                                        <span className="text-[11px] text-muted-foreground shrink-0">{item.meta}</span>
+                                      )}
+                                    </label>
+                                  ))}
+                                  {visibleItems.length === 0 && (
+                                    <p className="text-xs text-muted-foreground p-2">No items match your search.</p>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {createError && (
                 <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm">
                   {createError}
@@ -438,6 +692,24 @@ const ProfileModal = ({ isOpen, onClose }) => {
                           </span>
                         ))}
                       </div>
+                      {(session.sharedItems || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          {session.sharedItems.slice(0, 6).map((item, idx) => (
+                            <span
+                              key={`${item.itemId}-${idx}`}
+                              className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/25"
+                            >
+                              <Paperclip className="w-3 h-3" />
+                              {item.title || GRANTABLE_PAGES.find((p) => p.key === item.page)?.label || item.page}
+                            </span>
+                          ))}
+                          {session.sharedItems.length > 6 && (
+                            <span className="text-[11px] text-muted-foreground self-center">
+                              +{session.sharedItems.length - 6} more
+                            </span>
+                          )}
+                        </div>
+                      )}
                       <div className="mt-3 flex gap-2">
                         <input
                           readOnly

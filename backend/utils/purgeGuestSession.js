@@ -37,13 +37,15 @@ const removeFile = async (publicPath) => {
 };
 
 // Best-effort cleanup of guest-uploaded art files before the docs disappear.
+// Shared copies (sharedCopy: true) point at the OWNER's files — never delete those.
 const removeGuestArtFiles = async (sessionId) => {
   try {
+    const notShared = { guestSession: sessionId, sharedCopy: { $ne: true } };
     const [blogs, photos, videos, music] = await Promise.all([
-      ArtBlog.find({ guestSession: sessionId }).lean(),
-      ArtPhoto.find({ guestSession: sessionId }).lean(),
-      ArtVideo.find({ guestSession: sessionId }).lean(),
-      ArtMusic.find({ guestSession: sessionId }).lean(),
+      ArtBlog.find(notShared).lean(),
+      ArtPhoto.find(notShared).lean(),
+      ArtVideo.find(notShared).lean(),
+      ArtMusic.find(notShared).lean(),
     ]);
     const urls = [
       ...photos.map((d) => d.url),

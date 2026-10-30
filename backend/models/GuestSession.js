@@ -15,6 +15,16 @@ const guestSessionSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  // Specific owner items copied into the guest's partition when the link
+  // was created ({ page, itemId, title }).
+  sharedItems: {
+    type: [new mongoose.Schema({
+      page: { type: String, required: true },
+      itemId: { type: mongoose.Schema.Types.ObjectId, required: true },
+      title: { type: String, default: '' },
+    }, { _id: false })],
+    default: [],
+  },
   token: {
     type: String,
     required: true,

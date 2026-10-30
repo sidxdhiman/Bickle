@@ -233,8 +233,11 @@ exports.deleteArt = async (req, res) => {
       );
     }
 
-    const files = [item.url, ...(item.images || [])];
-    await Promise.all(files.map(removeFile));
+    // A shared copy points at the owner's media — only the doc goes away.
+    if (!item.sharedCopy) {
+      const files = [item.url, ...(item.images || [])];
+      await Promise.all(files.map(removeFile));
+    }
 
     res.json({ message: 'Deleted' });
   } catch (error) {

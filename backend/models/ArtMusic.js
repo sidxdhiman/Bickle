@@ -12,6 +12,12 @@ const artMusicSchema = new mongoose.Schema({
     default: null,
     index: true,
   },
+  // True for copies cloned from the owner into a guest session — their url
+  // points at the owner's file, which must never be deleted by guest cleanup.
+  sharedCopy: {
+    type: Boolean,
+    default: false,
+  },
   title: {
     type: String,
     default: '',

@@ -34,6 +34,18 @@ exports.addTransaction = async (req, res) => {
   }
 };
 
+// Recent transactions across all months — used by the grant-access picker.
+exports.getAllTransactions = async (req, res) => {
+  try {
+    const transactions = await Transaction.find(scopeFilter(req, 'userId'))
+      .sort({ date: -1 })
+      .limit(500);
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching transactions', error: error.message });
+  }
+};
+
 // Get transactions for a specific month
 exports.getMonthlyTransactions = async (req, res) => {
   try {
