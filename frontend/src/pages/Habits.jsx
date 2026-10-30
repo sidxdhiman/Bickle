@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAccess } from '../context/AccessContext';
 import axios from 'axios';
 import { Plus, Check, X, Edit, Trash2, CalendarDays, BarChart3, Flame, ListChecks, PartyPopper } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -117,6 +118,7 @@ const HabitModal = ({ isOpen, onClose, onSubmit, habit = null }) => {
 };
 
 const Habits = () => {
+  const { canEdit } = useAccess();
   const [habits, setHabits] = useState(() => peek('habits')?.habits ?? []);
   const [loading, setLoading] = useState(() => !peek('habits'));
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -240,16 +242,18 @@ const Habits = () => {
                 : `${doneToday} of ${habits.length} done today`}
           </p>
         </div>
-        <button
-          onClick={() => {
-            setEditingHabit(null);
-            setIsModalOpen(true);
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          Add Habit
-        </button>
+        {canEdit('habits') && (
+          <button
+            onClick={() => {
+              setEditingHabit(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Add Habit
+          </button>
+        )}
       </header>
 
       {habits.length > 0 && (

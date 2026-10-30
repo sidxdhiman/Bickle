@@ -9,6 +9,7 @@ import {
   CheckCircle2, SkipForward, Link2,
 } from 'lucide-react';
 import { useWorkflows, makeId, FOLDER_COLORS } from '../hooks/useWorkflows';
+import { useAccess } from '../context/AccessContext';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -201,6 +202,7 @@ const ContinuationSelect = ({ value, onChange, steps, currentStepId, isBranchTar
 );
 
 const Workflows = () => {
+  const { canEdit } = useAccess();
   const [state, update] = useWorkflows();
   const { folders, workflows, runs } = state;
 
@@ -551,12 +553,14 @@ const Workflows = () => {
               Step-by-step procedures with branches, exceptions and folders.
             </p>
           </div>
-          <button
-            onClick={handleCreateWorkflow}
-            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg transition"
-          >
-            <Plus size={18} /> New workflow
-          </button>
+          {canEdit('workflows') && (
+            <button
+              onClick={handleCreateWorkflow}
+              className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg transition"
+            >
+              <Plus size={18} /> New workflow
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[210px_290px_minmax(0,1fr)] gap-4 md:gap-5 items-start">
@@ -564,13 +568,15 @@ const Workflows = () => {
           <div className="rounded-2xl bg-secondary border border-border p-3 space-y-1">
             <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center justify-between">
               Folders
-              <button
-                onClick={() => setAddingFolder((v) => !v)}
-                className="p-1 rounded hover:bg-accent transition"
-                title="New folder"
-              >
-                <FolderPlus size={14} />
-              </button>
+              {canEdit('workflows') && (
+                <button
+                  onClick={() => setAddingFolder((v) => !v)}
+                  className="p-1 rounded hover:bg-accent transition"
+                  title="New folder"
+                >
+                  <FolderPlus size={14} />
+                </button>
+              )}
             </div>
 
             {addingFolder && (
@@ -766,12 +772,14 @@ const Workflows = () => {
                 <p className="text-muted-foreground text-sm">
                   Select a workflow, or create a new one to get started.
                 </p>
-                <button
-                  onClick={handleCreateWorkflow}
-                  className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm transition"
-                >
-                  <Plus size={16} /> New workflow
-                </button>
+                {canEdit('workflows') && (
+                  <button
+                    onClick={handleCreateWorkflow}
+                    className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg text-sm transition"
+                  >
+                    <Plus size={16} /> New workflow
+                  </button>
+                )}
               </div>
             )}
 

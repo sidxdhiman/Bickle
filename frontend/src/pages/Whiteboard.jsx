@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useAccess } from '../context/AccessContext';
 import {
   MousePointer2, Hand, Pencil, Minus, MoveUpRight, Square, Circle, Type,
   Eraser, Undo2, Redo2, Trash2, Plus, Magnet, ZoomIn, ZoomOut, Maximize,
@@ -239,6 +240,7 @@ const TOOLS = [
 ];
 
 const Whiteboard = () => {
+  const { canEdit } = useAccess();
   const cachedWb = peek('whiteboard');
   const cachedBoard = cachedWb?.boards?.find(b => b._id === cachedWb.activeBoardId);
   const [boards, setBoards] = useState(() => cachedWb?.boards ?? []);
@@ -965,12 +967,14 @@ const Whiteboard = () => {
               'Autosave on'
             )}
           </div>
-          <button
-            onClick={createBoard}
-            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="w-4 h-4" /> New Board
-          </button>
+          {canEdit('whiteboard') && (
+            <button
+              onClick={createBoard}
+              className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:opacity-90 transition-opacity"
+            >
+              <Plus className="w-4 h-4" /> New Board
+            </button>
+          )}
         </div>
       </header>
 

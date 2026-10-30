@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Shield, Clock, CheckCircle2, LogOut, X, Paperclip } from 'lucide-react';
+import { Shield, Clock, CheckCircle2, LogOut, X, Paperclip, Eye } from 'lucide-react';
 import { PAGES } from '../config/pages';
 
 const formatRemaining = (expiresAt) => {
@@ -13,7 +13,7 @@ const formatRemaining = (expiresAt) => {
   return `${mins}m ${secs.toString().padStart(2, '0')}s`;
 };
 
-const GuestWelcomeModal = ({ allowedPages, sharedItems = [], expiresAt, onClose, onEnd }) => {
+const GuestWelcomeModal = ({ allowedPages, pageAccess = {}, sharedItems = [], expiresAt, onClose, onEnd }) => {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -56,6 +56,11 @@ const GuestWelcomeModal = ({ allowedPages, sharedItems = [], expiresAt, onClose,
                 <div key={page.key} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-secondary/30">
                   <page.icon className="w-4 h-4 text-primary shrink-0" />
                   <span className="text-sm">{page.label}</span>
+                  {pageAccess[page.key] === 'view' && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5">
+                      <Eye className="w-3 h-3" /> View only
+                    </span>
+                  )}
                   <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-auto shrink-0" />
                 </div>
               ))}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAccess } from '../context/AccessContext';
 import {
   Plus, Moon, Sun, Clock, TrendingUp, X, Calendar
 } from 'lucide-react';
@@ -293,6 +294,7 @@ const AnalyzerModal = ({ isOpen, onClose }) => {
 };
 
 const Sleep = () => {
+  const { canEdit } = useAccess();
   const [sleeps, setSleeps] = useState(() => peek('sleep')?.sleeps ?? []);
   const [loading, setLoading] = useState(() => !peek('sleep'));
   const [modalOpen, setModalOpen] = useState(false);
@@ -380,13 +382,15 @@ const Sleep = () => {
             <TrendingUp className="w-4 h-4" />
             Analyzer
           </button>
-          <button
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-3 sm:px-4 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm sm:text-base"
-          >
-            <Plus className="w-4 h-4" />
-            Add Sleep
-          </button>
+          {canEdit('sleep') && (
+            <button
+              onClick={() => setModalOpen(true)}
+              className="flex items-center gap-2 bg-primary text-primary-foreground px-3 sm:px-4 py-2 rounded-md hover:bg-primary/90 transition-colors text-sm sm:text-base"
+            >
+              <Plus className="w-4 h-4" />
+              Add Sleep
+            </button>
+          )}
         </div>
       </div>
 

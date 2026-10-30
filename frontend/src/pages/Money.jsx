@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAccess } from '../context/AccessContext';
 import {
   Plus, TrendingUp, TrendingDown, DollarSign, ChevronLeft, ChevronRight,
   Edit, Trash2, Eye
@@ -18,6 +19,7 @@ function cn(...inputs) {
 const monthKey = (d) => `money:${d.getFullYear()}-${d.getMonth() + 1}`;
 
 const Money = () => {
+  const { canEdit } = useAccess();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [transactions, setTransactions] = useState(() => peek(monthKey(currentMonth))?.transactions ?? []);
   const [totals, setTotals] = useState(() => peek(monthKey(currentMonth))?.totals ?? { income: 0, expense: 0, net: 0, byCategory: {} });
@@ -155,16 +157,18 @@ const Money = () => {
           <h1 className="text-3xl font-bold tracking-tight">Money Tracker</h1>
           <p className="text-muted-foreground">Track your income and expenses</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingTransaction(null);
-            setShowAddModal(true);
-          }}
-          className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg transition"
-        >
-          <Plus size={20} />
-          Add Transaction
-        </button>
+        {canEdit('money') && (
+          <button
+            onClick={() => {
+              setEditingTransaction(null);
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-lg transition"
+          >
+            <Plus size={20} />
+            Add Transaction
+          </button>
+        )}
       </div>
 
       {/* Month Navigation */}

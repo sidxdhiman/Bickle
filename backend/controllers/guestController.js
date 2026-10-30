@@ -3,15 +3,21 @@ const jwt = require('jsonwebtoken');
 const GuestSession = require('../models/GuestSession');
 const { GRANTABLE_PAGE_KEYS } = require('../config/pages');
 const { purgeGuestData } = require('../utils/purgeGuestSession');
-const { cloneSharedItems } = require('../utils/cloneSharedItems');
+const { cloneSharedItems, PAGE_SOURCES } = require('../utils/cloneSharedItems');
 
 const serializeSharedItems = (items) =>
-  (items || []).map((item) => ({ page: item.page, itemId: item.itemId, title: item.title }));
+  (items || []).map((item) => ({
+    page: item.page,
+    itemId: item.itemId,
+    title: item.title,
+    ...(item.payload !== undefined ? { payload: item.payload } : {}),
+  }));
 
 const serialize = (session) => ({
   _id: session._id,
   label: session.label,
   allowedPages: session.allowedPages,
+  pageAccess: session.pageAccess || {},
   sharedItems: serializeSharedItems(session.sharedItems),
   token: session.token,
   expiresAt: session.expiresAt,
@@ -21,7 +27,7 @@ const serialize = (session) => ({
 
 exports.createSession = async (req, res) => {
   try {
-    const { label, durationMinutes, allowedPages } = req.body;
+    const { label, durationMinutes, allowedPages, pageAccess } = req.body;
 
     const minutes = Number(durationMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) {
@@ -32,17 +38,33 @@ exports.createSession = async (req, res) => {
       ? allowedPages.filter((page) => GRANTABLE_PAGE_KEYS.includes(page))
       : [];
 
-    // Specific items to copy into the guest's session ({ page, itemId }).
+    // Per-module read/write permissions: { pageKey: 'view' | 'edit' }.
+    const access = {};
+    if (pageAccess && typeof pageAccess === 'object' && !Array.isArray(pageAccess)) {
+      for (const [page, mode] of Object.entries(pageAccess)) {
+        if (!GRANTABLE_PAGE_KEYS.includes(page)) continue;
+        if (mode !== 'view' && mode !== 'edit') continue;
+        access[page] = mode;
+      }
+    }
+
+    // Specific items to share ({ page, itemId, title?, payload? }).
     const rawItems = Array.isArray(req.body.sharedItems) ? req.body.sharedItems : [];
     const seen = new Set();
     const items = [];
     for (const raw of rawItems) {
       if (!raw || !GRANTABLE_PAGE_KEYS.includes(raw.page)) continue;
-      if (!mongoose.isValidObjectId(raw.itemId)) continue;
-      const key = `${raw.page}:${String(raw.itemId)}`;
+      const itemId = typeof raw.itemId === 'string' ? raw.itemId.trim().slice(0, 64) : '';
+      if (!itemId) continue;
+      const key = `${raw.page}:${itemId}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      items.push({ page: raw.page, itemId: raw.itemId });
+      items.push({
+        page: raw.page,
+        itemId,
+        title: typeof raw.title === 'string' ? raw.title.slice(0, 140) : '',
+        payload: raw.payload !== undefined ? raw.payload : undefined,
+      });
     }
     // Sharing items implies the module itself is enabled.
     for (const page of items.map((i) => i.page)) {
@@ -66,17 +88,24 @@ exports.createSession = async (req, res) => {
       owner: req.user._id,
       label: (label || '').trim() || 'Guest',
       allowedPages: pages,
+      pageAccess: access,
       token,
       expiresAt,
     });
 
     if (items.length) {
-      // Copies land in the guest partition and are wiped when the session ends.
-      const sharedItems = await cloneSharedItems({
+      // DB-backed pages are copied into the guest partition; the rest
+      // (workflows) ride along as a payload injected on the guest's device.
+      const cloned = await cloneSharedItems({
         ownerId: req.user._id,
         sessionId,
         items,
       });
+      const cloneable = new Set(Object.keys(PAGE_SOURCES));
+      const passthrough = items
+        .filter((i) => !cloneable.has(i.page))
+        .map((i) => ({ page: i.page, itemId: i.itemId, title: i.title, payload: i.payload }));
+      const sharedItems = [...cloned, ...passthrough];
       if (sharedItems.length) {
         session.sharedItems = sharedItems;
         await session.save();
@@ -128,10 +157,12 @@ exports.getSession = async (req, res) => {
 
     res.json({
       allowedPages: session.allowedPages,
+      pageAccess: session.pageAccess || {},
       sharedItems: (session.sharedItems || []).map((s) => ({
         page: s.page,
         itemId: s.itemId,
         title: s.title,
+        ...(s.payload !== undefined ? { payload: s.payload } : {}),
       })),
       expiresAt: session.expiresAt,
       label: session.label,

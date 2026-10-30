@@ -4,7 +4,7 @@ import axios from 'axios';
 import { ensureBackendToken } from './utils/backendAuth';
 import { clearSearchIndex } from './utils/searchIndex';
 import { AccessProvider, useAccess } from './context/AccessContext';
-import { ALL_PAGE_KEYS, PAGES } from './config/pages';
+import { ALL_PAGE_KEYS, PAGES, pageKeyForApiUrl } from './config/pages';
 import GuestWelcomeModal from './components/GuestWelcomeModal';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
@@ -49,6 +49,60 @@ const readGuestTokenFromUrl = () => {
   const match = window.location.pathname.match(/^\/guest\/([^/?#]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
+
+// Shared workflows ride along in the grant link as JSON payloads (workflows
+// live in localStorage, not the DB) — merge them into the guest's store.
+const mergeSharedWorkflows = (sharedItems) => {
+  const workflows = (sharedItems || []).filter(
+    (item) => item.page === 'workflows' && item.payload?.workflow?.id && item.payload?.workflow?.title
+  );
+  if (workflows.length === 0) return;
+  try {
+    const raw = localStorage.getItem('bickle-workflows');
+    const state = raw
+      ? JSON.parse(raw)
+      : { folders: [], workflows: [], runs: [], selectedFolderId: null };
+    if (!Array.isArray(state.workflows)) state.workflows = [];
+    if (!Array.isArray(state.folders)) state.folders = [];
+    if (!Array.isArray(state.runs)) state.runs = [];
+    let changed = false;
+    for (const { payload } of workflows) {
+      const wf = payload.workflow;
+      if (state.workflows.some((existing) => existing.id === wf.id)) continue;
+      const folderExists = state.folders.some((f) => f.id === wf.folderId);
+      state.workflows.push({
+        ...wf,
+        folderId: folderExists ? wf.folderId : (state.folders[0]?.id ?? null),
+      });
+      changed = true;
+    }
+    if (!changed) return;
+    if (!state.selectedFolderId && state.folders.length) {
+      state.selectedFolderId = state.folders[0].id;
+    }
+    localStorage.setItem('bickle-workflows', JSON.stringify(state));
+    window.dispatchEvent(new CustomEvent('bickle-workflows-change'));
+  } catch (error) {
+    console.error('Could not merge shared workflows:', error);
+  }
+};
+
+// Reject write requests client-side when the guest's module is view-only.
+// The backend enforces the same rule — this just fails fast with a clean error.
+axios.interceptors.request.use((config) => {
+  const guest = readStoredGuest();
+  if (!guest?.token) return config;
+  const auth = config.headers?.Authorization || config.headers?.authorization || '';
+  if (!auth.includes(guest.token)) return config;
+  if (['get', 'head', 'options'].includes((config.method || 'get').toLowerCase())) return config;
+  const pageKey = pageKeyForApiUrl(config.url);
+  if (pageKey && guest.pageAccess?.[pageKey] === 'view') {
+    const error = new Error('This area was shared as view-only');
+    error.response = { status: 403, data: { message: 'This area was shared as view-only' } };
+    return Promise.reject(error);
+  }
+  return config;
+});
 
 const RequireAccess = ({ pageKey, children }) => {
   const { isGuest, allowedPages } = useAccess();
@@ -100,10 +154,12 @@ const App = () => {
           const guestData = {
             token: guestToken,
             allowedPages: res.data.allowedPages,
+            pageAccess: res.data.pageAccess || {},
             sharedItems: res.data.sharedItems || [],
             expiresAt: res.data.expiresAt,
           };
           localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(guestData));
+          mergeSharedWorkflows(guestData.sharedItems);
           setGuest(guestData);
           if (urlToken) {
             setShowGuestWelcome(true);
@@ -187,8 +243,13 @@ const App = () => {
   const accessValue = {
     isGuest: !!guest,
     allowedPages: guest ? guest.allowedPages : ALL_PAGE_KEYS,
+    pageAccess: guest?.pageAccess || {},
     expiresAt: guest?.expiresAt || null,
     endGuest,
+    canEdit: (pageKey) => {
+      if (!guest) return true;
+      return (guest.pageAccess || {})[pageKey] !== 'view';
+    },
   };
 
   return (
@@ -218,6 +279,7 @@ const App = () => {
       {guest && showGuestWelcome && (
         <GuestWelcomeModal
           allowedPages={guest.allowedPages}
+          pageAccess={guest.pageAccess || {}}
           sharedItems={guest.sharedItems || []}
           expiresAt={guest.expiresAt}
           onClose={() => setShowGuestWelcome(false)}

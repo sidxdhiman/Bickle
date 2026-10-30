@@ -37,3 +37,27 @@ export const GRANTABLE_PAGES = PAGES.filter((page) => page.key !== 'dashboard');
 export const GRANTABLE_PAGE_KEYS = GRANTABLE_PAGES.map((page) => page.key);
 
 export const pageByKey = (key) => PAGES.find((page) => page.key === key);
+
+// API URL prefix → module key (mirrors backend/config/pages.js). Used to
+// block write requests client-side when a module was shared view-only.
+export const API_PREFIX_PAGE_MAP = [
+  ['/lists', 'tasks'],
+  ['/tasks', 'tasks'],
+  ['/calendar', 'calendar'],
+  ['/notes', 'notes'],
+  ['/sleep', 'sleep'],
+  ['/money', 'money'],
+  ['/habits', 'habits'],
+  ['/whiteboards', 'whiteboard'],
+  ['/art', 'art'],
+];
+
+export const pageKeyForApiUrl = (url) => {
+  const path = (url || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/api/, '');
+  for (const [prefix, key] of API_PREFIX_PAGE_MAP) {
+    if (path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`)) {
+      return key;
+    }
+  }
+  return null;
+};

@@ -108,4 +108,4 @@ const cloneSharedItems = async ({ ownerId, sessionId, items }) => {
   return saved;
 };
 
-module.exports = { cloneSharedItems };
+module.exports = { cloneSharedItems, PAGE_SOURCES };

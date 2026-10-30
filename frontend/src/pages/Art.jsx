@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import { useAccess } from '../context/AccessContext';
 import { peek, stash } from '../utils/pageCache';
 import { syncSearchType } from '../utils/searchIndex';
 import {
@@ -18,6 +19,7 @@ function cn(...inputs) {
 const EMPTY = { blogs: [], photos: [], videos: [], music: [] };
 
 const Art = () => {
+  const { canEdit } = useAccess();
   const [data, setData] = useState(() => peek('art') ?? EMPTY);
   const [loading, setLoading] = useState(() => !peek('art'));
   const [error, setError] = useState('');
@@ -154,10 +156,12 @@ const Art = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
-            <Upload className="w-4 h-4" />
-            Upload
-          </button>
+          {canEdit('art') && (
+            <button onClick={() => setShowUpload(true)} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
+              <Upload className="w-4 h-4" />
+              Upload
+            </button>
+          )}
           <button
             onClick={() => window.open('/sid-art', '_blank', 'noopener,noreferrer')}
             className="px-4 py-2 rounded-lg bg-secondary border border-border text-sm font-medium hover:border-primary/50 transition-colors flex items-center gap-2"
@@ -259,24 +263,26 @@ const Art = () => {
         </div>
       )}
 
-      <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <Plus className="w-5 h-5 mt-0.5 text-muted-foreground shrink-0" />
-          <div>
-            <h3 className="text-base sm:text-lg font-semibold">Add something new</h3>
-            <p className="text-sm text-muted-foreground">
-              Blogs can carry images, and every image you attach also lands in your gallery.
-            </p>
+      {canEdit('art') && (
+        <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <Plus className="w-5 h-5 mt-0.5 text-muted-foreground shrink-0" />
+            <div>
+              <h3 className="text-base sm:text-lg font-semibold">Add something new</h3>
+              <p className="text-sm text-muted-foreground">
+                Blogs can carry images, and every image you attach also lands in your gallery.
+              </p>
+            </div>
           </div>
+          <button
+            onClick={() => setShowUpload(true)}
+            className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2 shrink-0"
+          >
+            <Upload className="w-4 h-4" />
+            Upload
+          </button>
         </div>
-        <button
-          onClick={() => setShowUpload(true)}
-          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors flex items-center gap-2 shrink-0"
-        >
-          <Upload className="w-4 h-4" />
-          Upload
-        </button>
-      </div>
+      )}
 
       {showUpload && <ArtUploadModal onClose={() => setShowUpload(false)} onDone={handleSaved} />}
     </div>

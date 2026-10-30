@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, LogOut, Copy, Check, Clock, Shield, User, Link2, RefreshCw, CheckCircle2, Ban, Paperclip, ChevronDown, Loader2 } from 'lucide-react';
+import { X, LogOut, Copy, Check, Clock, Shield, User, Link2, RefreshCw, CheckCircle2, Ban, Paperclip, ChevronDown, Loader2, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -96,6 +96,25 @@ const SHAREABLE_PAGES = {
       ];
     },
   },
+  workflows: {
+    label: 'Workflows',
+    load: async () => {
+      // Workflows live in this browser's localStorage — snapshot them into
+      // the grant link so the guest's device receives a copy.
+      try {
+        const raw = localStorage.getItem('bickle-workflows');
+        const state = raw ? JSON.parse(raw) : {};
+        const folders = Object.fromEntries((state.folders || []).map((f) => [f.id, f.name]));
+        return (state.workflows || []).map((w) => ({
+          id: w.id,
+          title: w.title || 'Untitled workflow',
+          meta: folders[w.folderId] || '',
+        }));
+      } catch (error) {
+        return [];
+      }
+    },
+  },
 };
 
 const formatRemaining = (expiresAt) => {
@@ -135,6 +154,8 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const [openPicker, setOpenPicker] = useState(null);
   const [pickerCatalogs, setPickerCatalogs] = useState({});
   const [pickerSearch, setPickerSearch] = useState('');
+  // Per-module permission: { [pageKey]: 'view' | 'edit' }. Unset = 'edit'.
+  const [moduleAccess, setModuleAccess] = useState({});
 
   // Sessions
   const [sessions, setSessions] = useState([]);
@@ -216,10 +237,16 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const togglePage = (key) => {
     setPages((prev) => {
       if (prev.includes(key)) {
-        // Deselecting a module also clears any items picked inside it.
+        // Deselecting a module also clears any items/permissions picked for it.
         setItemSelections((items) => {
           if (!items[key]) return items;
           const next = { ...items };
+          delete next[key];
+          return next;
+        });
+        setModuleAccess((access) => {
+          if (!(key in access)) return access;
+          const next = { ...access };
           delete next[key];
           return next;
         });
@@ -272,11 +299,31 @@ const ProfileModal = ({ isOpen, onClose }) => {
     const sharedItems = [];
     for (const [pageKey, ids] of Object.entries(itemSelections)) {
       if (!pages.includes(pageKey)) continue;
+      if (pageKey === 'workflows') {
+        // Workflows are localStorage-only: snapshot the full objects into
+        // the link payload so the guest's browser can restore them.
+        let state = {};
+        try {
+          state = JSON.parse(localStorage.getItem('bickle-workflows') || '{}');
+        } catch (error) {
+          state = {};
+        }
+        for (const id of ids || []) {
+          const wf = (state.workflows || []).find((w) => w.id === id);
+          if (!wf) continue;
+          sharedItems.push({ page: 'workflows', itemId: id, title: wf.title || '', payload: { workflow: wf } });
+        }
+        continue;
+      }
       const catalog = pickerCatalogs[pageKey]?.items || [];
       for (const id of ids || []) {
         const found = catalog.find((item) => item.id === id);
         sharedItems.push({ page: pageKey, itemId: id, title: found?.title || '' });
       }
+    }
+    const pageAccessMap = {};
+    for (const key of pages) {
+      pageAccessMap[key] = moduleAccess[key] === 'view' ? 'view' : 'edit';
     }
     setCreating(true);
     try {
@@ -284,6 +331,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
         label: label.trim() || 'Guest',
         durationMinutes: Number(duration),
         allowedPages: pages,
+        pageAccess: pageAccessMap,
         sharedItems,
       });
       const link = `${window.location.origin}/guest/${res.data.token}`;
@@ -294,6 +342,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
       setItemSelections({});
       setOpenPicker(null);
       setPickerCatalogs({});
+      setModuleAccess({});
     } catch (error) {
       console.error('Error creating session:', error);
       setCreateError(error.response?.data?.message || 'Failed to create access link.');
@@ -481,11 +530,55 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 <p className="text-xs text-muted-foreground mt-2">Everything not selected will be hidden and blocked for them.</p>
               </div>
 
+              {pages.length > 0 && (
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Can they edit?</label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    View-only guests can browse and copy what you share, but can never change your data.
+                  </p>
+                  <div className="space-y-1.5">
+                    {pages.map((key) => {
+                      const page = GRANTABLE_PAGES.find((p) => p.key === key);
+                      if (!page) return null;
+                      const mode = moduleAccess[key] === 'view' ? 'view' : 'edit';
+                      return (
+                        <div key={key} className="flex items-center gap-3 px-3 py-2 border border-border rounded-lg">
+                          <page.icon className="w-4 h-4 text-primary shrink-0" />
+                          <span className="text-sm font-medium flex-1">{page.label}</span>
+                          <div className="flex rounded-md border border-border overflow-hidden shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setModuleAccess((prev) => ({ ...prev, [key]: 'view' }))}
+                              className={cn(
+                                'inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium transition-colors',
+                                mode === 'view' ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:bg-accent/50'
+                              )}
+                            >
+                              <Eye className="w-3 h-3" /> View
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setModuleAccess((prev) => ({ ...prev, [key]: 'edit' }))}
+                              className={cn(
+                                'px-2.5 py-1 text-xs font-medium border-l border-border transition-colors',
+                                mode === 'edit' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent/50'
+                              )}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {pages.some((key) => SHAREABLE_PAGES[key]) && (
                 <div>
                   <label className="block text-sm font-semibold mb-1">Share specific items (optional)</label>
                   <p className="text-xs text-muted-foreground mb-2">
-                    Pick items to copy into their session — like a particular note. Leave empty to give them a fresh, empty workspace.
+                    Pick items to copy into their session — like a particular note or workflow. Leave empty to give them a fresh, empty workspace.
                   </p>
                   <div className="space-y-2">
                     {pages.filter((key) => SHAREABLE_PAGES[key]).map((key) => {
@@ -686,11 +779,24 @@ const ProfileModal = ({ isOpen, onClose }) => {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1.5 mt-3">
-                        {session.allowedPages.map((key) => (
-                          <span key={key} className="text-[11px] px-2 py-0.5 rounded-full bg-accent text-foreground">
-                            {GRANTABLE_PAGES.find((p) => p.key === key)?.label || key}
-                          </span>
-                        ))}
+                        {session.allowedPages.map((key) => {
+                          const readOnly = (session.pageAccess || {})[key] === 'view';
+                          return (
+                            <span
+                              key={key}
+                              className={cn(
+                                'inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full',
+                                readOnly
+                                  ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
+                                  : 'bg-accent text-foreground'
+                              )}
+                            >
+                              {readOnly && <Eye className="w-3 h-3" />}
+                              {GRANTABLE_PAGES.find((p) => p.key === key)?.label || key}
+                              {readOnly && ' · view'}
+                            </span>
+                          );
+                        })}
                       </div>
                       {(session.sharedItems || []).length > 0 && (
                         <div className="flex flex-wrap gap-1.5 mt-2">

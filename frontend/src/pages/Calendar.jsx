@@ -18,6 +18,7 @@ import axios from 'axios';
 import { CalendarSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
 import { syncSearchType } from '../utils/searchIndex';
+import { useAccess } from '../context/AccessContext';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -794,6 +795,7 @@ const CalendarEntryModal = ({
 };
 
 const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent, onOpenTask }) => {
+  const { canEdit } = useAccess();
   if (!isOpen || !date) return null;
   const eventItems = items.filter((item) => item.source === 'event');
   const holidayItems = items.filter((item) => item.source === 'holiday');
@@ -808,22 +810,26 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent, onO
             <p className="text-sm text-muted-foreground">Review events and deadlines for this day.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => onAdd('event')}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Event
-            </button>
-            <button
-              type="button"
-              onClick={() => onAdd('task')}
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent/80 transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              Add Task
-            </button>
+            {canEdit('calendar') && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onAdd('event')}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Event
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onAdd('task')}
+                  className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-accent/80 transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Task
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -964,6 +970,7 @@ const DayDetailsModal = ({ isOpen, date, items, onClose, onAdd, onEditEvent, onO
 };
 
 const CalendarPage = () => {
+  const { canEdit } = useAccess();
   const [view, setView] = useState('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [tasks, setTasks] = useState(() => peek('calendar')?.tasks ?? []);
@@ -1157,6 +1164,12 @@ const CalendarPage = () => {
     if (item.source === 'task' && item.taskId) {
       openTaskInList(item.taskId);
     } else if (item.source === 'event') {
+      if (!canEdit('calendar')) {
+        // View-only calendar: show the read-only day details instead of the editor.
+        setSelectedDate(startOfDay(new Date(item.start)));
+        setIsDayDetailsOpen(true);
+        return;
+      }
       openEditModal(item);
     }
   };

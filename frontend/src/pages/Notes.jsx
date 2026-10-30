@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAccess } from '../context/AccessContext';
 import {
   Plus,
   Search,
@@ -167,6 +168,7 @@ const MoveNoteModal = ({ prompt, onMove, onCopy, onKeep }) => {
 };
 
 const NotesPage = () => {
+  const { canEdit } = useAccess();
   const cached = peek('notes');
   const [notes, setNotes] = useState(() => cached?.notes ?? []);
   const [loading, setLoading] = useState(() => !cached);
@@ -679,13 +681,15 @@ const NotesPage = () => {
           </div>
         </div>
 
-        <button
-          onClick={handleCreateNote}
-          className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus className="w-4 h-4" />
-          New Note
-        </button>
+        {canEdit('notes') && (
+          <button
+            onClick={handleCreateNote}
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg flex items-center gap-2 font-medium hover:opacity-90 transition-opacity"
+          >
+            <Plus className="w-4 h-4" />
+            New Note
+          </button>
+        )}
       </header>
 
       <div className="flex-1 flex gap-6 overflow-hidden h-[calc(100vh-160px)]">
@@ -696,16 +700,18 @@ const NotesPage = () => {
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                 <Folder className="w-3 h-3" /> Categories
               </h3>
-              <button
-                onClick={() => {
-                  setEditingCategory(null);
-                  setShowCategoryModal(true);
-                }}
-                className="p-1 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground"
-                title="Add category"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
+              {canEdit('notes') && (
+                <button
+                  onClick={() => {
+                    setEditingCategory(null);
+                    setShowCategoryModal(true);
+                  }}
+                  className="p-1 hover:bg-accent rounded transition-colors text-muted-foreground hover:text-foreground"
+                  title="Add category"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
+              )}
             </div>
             <div className="space-y-1">
               <button

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAccess } from '../context/AccessContext';
 import axios from 'axios';
 import {
   Plus, Search, LayoutList, LayoutGrid, MoreVertical,
@@ -794,6 +795,7 @@ const ListManagementModal = ({ isOpen, onClose, list, onUpdate, onDelete }) => {
 };
 
 const TaskPage = () => {
+  const { canEdit } = useAccess();
   const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState('list');
   const [tasks, setTasks] = useState(() => peek('tasks')?.tasks ?? []);
@@ -1068,13 +1070,15 @@ const TaskPage = () => {
       >
         <h2 className="text-lg font-bold flex items-center justify-between">
           My Task Lists
-          <button
-            onClick={() => setIsCreateListOpen(true)}
-            className="p-2 rounded-full hover:bg-accent transition-colors"
-            title="Create new list"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+          {canEdit('tasks') && (
+            <button
+              onClick={() => setIsCreateListOpen(true)}
+              className="p-2 rounded-full hover:bg-accent transition-colors"
+              title="Create new list"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          )}
           <button
             className="lg:hidden p-2 rounded-full hover:bg-accent transition-colors"
             onClick={() => setIsSidebarOpen(false)}
@@ -1137,13 +1141,15 @@ const TaskPage = () => {
               <p className="text-sm text-muted-foreground">{lists.find(l => l._id === selectedList).description}</p>
             )}
           </div>
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
-          >
-            <Plus className="w-4 h-4" />
-            Add Task
-          </button>
+          {canEdit('tasks') && (
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors text-sm font-medium"
+            >
+              <Plus className="w-4 h-4" />
+              Add Task
+            </button>
+          )}
         </header>
 
         {/* Filters and View Mode */}

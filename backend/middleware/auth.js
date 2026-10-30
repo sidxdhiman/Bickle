@@ -32,8 +32,20 @@ const protect = async (req, res, next) => {
           return res.status(403).json({ message: 'Your access does not include this area' });
         }
 
+        // Read-only modules: guests may only GET (no create/update/delete).
+        const isReadOnly = pageKey
+          && (session.pageAccess || {})[pageKey] === 'view'
+          && !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
+        if (isReadOnly) {
+          return res.status(403).json({ message: 'This area was shared as view-only' });
+        }
+
         req.user = user;
-        req.guest = { sessionId: session._id, allowedPages: session.allowedPages };
+        req.guest = {
+          sessionId: session._id,
+          allowedPages: session.allowedPages,
+          pageAccess: session.pageAccess || {},
+        };
         req.dataScope = { user: user._id, guestSession: session._id };
         return next();
       }
