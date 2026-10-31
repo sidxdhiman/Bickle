@@ -132,11 +132,6 @@ Bickle/
     └── index.html
 ```
 
-## 🧰 Tech Stack
-
-**Frontend** — React 18 · Vite 5 · Tailwind CSS 3 · React Router 6 · Framer Motion · Lucide · pdf-lib/pdfjs
-**Backend** — Express 4 · Mongoose 8 · JWT auth · bcryptjs
-
 ---
 
 <div align="center">
