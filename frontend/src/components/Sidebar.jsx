@@ -1,10 +1,13 @@
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { Settings, LogOut, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { PAGES } from '../config/pages';
 import { useAccess } from '../context/AccessContext';
+import { useChatUnread } from '../hooks/useChatUnread';
+import { clearSearchIndex } from '../utils/searchIndex';
+import { endActiveProfile } from '../utils/profileState';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -12,7 +15,20 @@ function cn(...inputs) {
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { isGuest, allowedPages, endGuest } = useAccess();
+  const chatUnread = useChatUnread();
+  const navigate = useNavigate();
   const navItems = PAGES.filter((page) => allowedPages.includes(page.key));
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('backendToken');
+    localStorage.removeItem('authUnlocked');
+    endActiveProfile();
+    clearSearchIndex().catch(() => {});
+    onClose?.();
+    navigate('/');
+    setTimeout(() => window.location.reload(), 50);
+  };
 
   return (
     <aside
@@ -48,7 +64,12 @@ const Sidebar = ({ isOpen, onClose }) => {
               onClick={onClose}
             >
               <item.icon className="w-5 h-5" />
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium flex-1">{item.label}</span>
+              {item.key === 'chat' && chatUnread > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {chatUnread > 9 ? '9+' : chatUnread}
+                </span>
+              )}
             </NavLink>
           ))
         )}
@@ -77,7 +98,10 @@ const Sidebar = ({ isOpen, onClose }) => {
             <span className="font-medium">Leave session</span>
           </button>
         ) : (
-          <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive transition-all duration-200">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-destructive transition-all duration-200"
+          >
             <LogOut className="w-5 h-5" />
             <span className="font-medium">Logout</span>
           </button>

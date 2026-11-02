@@ -163,7 +163,7 @@ const Art = () => {
             </button>
           )}
           <button
-            onClick={() => window.open('/sid-art', '_blank', 'noopener,noreferrer')}
+            onClick={() => window.open('/bickle/sid-art', '_blank', 'noopener,noreferrer')}
             className="px-4 py-2 rounded-lg bg-secondary border border-border text-sm font-medium hover:border-primary/50 transition-colors flex items-center gap-2"
           >
             Go to Art Site

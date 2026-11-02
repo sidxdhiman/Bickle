@@ -87,9 +87,19 @@ const ALL_PAGES = ['tasks', 'habits', 'focus', 'calendar', 'notes', 'whiteboard'
     const mcatList = await api('GET', '/money/categories', { token: ownerToken });
     check(mcatList.status === 200 && mcatList.data.categories.length > 0, 'owner reads money categories', mcatList.data);
 
-    // Public art showcase (no token) still sees owner's work
+    // Public art showcase (no token) shows the showcase profile's work only
+    const showcase = await api('POST', '/auth/login', { body: { profile: 'me', password: '0]Hyisgh' } });
+    check(showcase.status === 200, 'seeded showcase profile logs in', showcase.data);
+    const showBlog = await api('POST', '/art/blogs', { token: showcase.data.token, body: { title: 'Showcase Post', content: 'public portfolio' } });
+    check(showBlog.status === 201, 'showcase profile creates an art blog', showBlog.data);
+
     const pub = await api('GET', '/art/blogs');
-    check(pub.status === 200 && pub.data.length === 1, 'anonymous showcase sees owner art blogs', pub.data && pub.data.length);
+    check(pub.status === 200 && pub.data.some((b) => b.title === 'Showcase Post'), 'anonymous showcase sees showcase-profile art', pub.data && pub.data.map((b) => b.title));
+    check(pub.data.every((b) => b.title !== 'My Post'), 'anonymous showcase HIDES other profiles art', pub.data && pub.data.map((b) => b.title));
+
+    // The regular profile still reads only its own art, never the showcase profile's
+    const ownerArt = await api('GET', '/art/blogs', { token: ownerToken });
+    check(ownerArt.status === 200 && ownerArt.data.length === 1 && ownerArt.data[0].title === 'My Post', 'profile art reads stay partitioned', ownerArt.data && ownerArt.data.map((b) => b.title));
 
     // Guest with ALL pages: every module read must be EMPTY
     const gs = await api('POST', '/guest', { token: ownerToken, body: { label: 'All', durationMinutes: 30, allowedPages: ALL_PAGES } });

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import { ensureBackendToken } from './utils/backendAuth';
+import { validateStoredToken } from './utils/backendAuth';
 import { clearSearchIndex } from './utils/searchIndex';
 import { AccessProvider, useAccess } from './context/AccessContext';
 import { ALL_PAGE_KEYS, PAGES, pageKeyForApiUrl } from './config/pages';
@@ -21,10 +21,11 @@ import Habits from './pages/Habits';
 import Whiteboard from './pages/Whiteboard';
 import PdfEditor from './pages/PdfEditor';
 import Art from './pages/Art';
+import Chat from './pages/Chat';
 import Workflows from './pages/Workflows';
 import SidArt from './pages/SidArt';
 
-axios.defaults.baseURL = 'http://localhost:5000/api';
+axios.defaults.baseURL = '/bickle/api';
 
 const storedToken = localStorage.getItem('token');
 if (storedToken) {
@@ -46,7 +47,7 @@ const readGuestTokenFromUrl = () => {
   const params = new URLSearchParams(window.location.search);
   const queryToken = params.get('guest');
   if (queryToken) return queryToken;
-  const match = window.location.pathname.match(/^\/guest\/([^/?#]+)/);
+  const match = window.location.pathname.match(/\/guest\/([^/?#]+)/);
   return match ? decodeURIComponent(match[1]) : null;
 };
 
@@ -138,7 +139,7 @@ const App = () => {
     }
     localStorage.removeItem(GUEST_STORAGE_KEY);
     clearSearchIndex().catch(() => {});
-    window.location.href = '/';
+    window.location.href = '/bickle/';
   }, []);
 
   useEffect(() => {
@@ -176,9 +177,9 @@ const App = () => {
       const token = localStorage.getItem('token');
 
       if (unlocked && token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        await ensureBackendToken();
-        setIsAuthenticated(true);
+        const valid = await validateStoredToken();
+        setIsAuthenticated(!!valid);
+        if (!valid) clearSearchIndex().catch(() => {});
       } else {
         localStorage.removeItem('authUnlocked');
       }
@@ -201,7 +202,7 @@ const App = () => {
   }, [guest, endGuest]);
 
   if (!hasCheckedAuth) {
-    const onSidArt = window.location.pathname.startsWith('/sid-art');
+    const onSidArt = window.location.pathname.startsWith('/bickle/sid-art') || window.location.pathname.startsWith('/sid-art');
     return (
       <div
         className="flex h-screen items-center justify-center"
@@ -231,7 +232,7 @@ const App = () => {
 
   if (!isAuthenticated && !guest) {
     return (
-      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <BrowserRouter basename="/bickle" future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
           <Route path="/sid-art" element={<SidArt />} />
           <Route path="/*" element={<Login onAuthSuccess={() => setIsAuthenticated(true)} />} />
@@ -254,7 +255,7 @@ const App = () => {
 
   return (
     <AccessProvider value={accessValue}>
-      <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <BrowserRouter basename="/bickle" future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
           <Route path="/sid-art" element={<SidArt />} />
           <Route path="/" element={<MainLayout />}>
@@ -262,6 +263,7 @@ const App = () => {
             <Route path="tasks" element={<RequireAccess pageKey="tasks"><Tasks /></RequireAccess>} />
             <Route path="calendar" element={<RequireAccess pageKey="calendar"><Calendar /></RequireAccess>} />
             <Route path="notes" element={<RequireAccess pageKey="notes"><Notes /></RequireAccess>} />
+            <Route path="chat" element={<RequireAccess pageKey="chat"><Chat /></RequireAccess>} />
             <Route path="sleep" element={<RequireAccess pageKey="sleep"><Sleep /></RequireAccess>} />
             <Route path="money" element={<RequireAccess pageKey="money"><Money /></RequireAccess>} />
             <Route path="focus" element={<RequireAccess pageKey="focus"><Focus /></RequireAccess>} />

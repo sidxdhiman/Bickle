@@ -26,6 +26,8 @@ const API_PAGE_MAP = [
   ['/api/whiteboards', 'whiteboard'],
   ['/api/art', 'art'],
   ['/api/settings', 'settings'],
+  // Chat belongs to the real profiles only — never grantable to guests.
+  ['/api/chat', 'chat'],
   // Guests must never manage/share access themselves.
   ['/api/guest', 'owner-management'],
 ];

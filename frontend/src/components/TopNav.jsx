@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Bell, User, Clock, LogOut, Menu } from 'lucide-react';
 import ProfileModal from './ProfileModal';
 import SearchPalette from './SearchPalette';
 import { useAccess } from '../context/AccessContext';
 import { useNavMode } from '../hooks/useNavMode';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { useChatUnread } from '../hooks/useChatUnread';
 
 const TopNav = ({ showMenu = false, onMenuClick }) => {
   const { isGuest, expiresAt, endGuest } = useAccess();
   const [navMode] = useNavMode();
+  const navigate = useNavigate();
+  const currentUser = useCurrentUser();
+  const chatUnread = useChatUnread();
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -117,18 +123,28 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
             </>
           ) : (
             <>
-              <button className="p-2 rounded-lg hover:bg-accent transition-colors relative">
+              <button
+                onClick={() => navigate('/chat')}
+                aria-label={chatUnread > 0 ? `Chat, ${chatUnread} unread messages` : 'Chat'}
+                className="p-2 rounded-lg hover:bg-accent transition-colors relative"
+              >
                 <Bell className="w-5 h-5 text-muted-foreground" />
-                <span className="absolute top-2 right-2 w-2 h-2 bg-primary border-2 border-secondary"></span>
+                {chatUnread > 0 ? (
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-secondary">
+                    {chatUnread > 9 ? '9+' : chatUnread}
+                  </span>
+                ) : (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-primary border-2 border-secondary"></span>
+                )}
               </button>
               <div ref={profileRef} className="flex items-center gap-3 pl-3 border-l border-border">
                 <div className="text-right hidden sm:block cursor-pointer" onClick={() => setShowProfile(true)}>
-                  <p className="text-sm font-semibold leading-none">Sidharth</p>
-                  <p className="text-xs text-muted-foreground">Pro Plan</p>
+                  <p className="text-sm font-semibold leading-none">{currentUser?.username || 'Bickle'}</p>
+                  <p className="text-xs text-muted-foreground">{currentUser?.email || 'Personal OS'}</p>
                 </div>
                 <button onClick={() => setShowProfile(true)} className="w-9 h-9 rounded-lg bg-accent flex items-center justify-center overflow-hidden border border-border cursor-pointer hover:ring-2 ring-primary transition-all">
-                  {profilePic ? (
-                    <img src={profilePic} alt="profile" className="w-full h-full object-cover" />
+                  {currentUser?.avatar || profilePic ? (
+                    <img src={currentUser?.avatar || profilePic} alt="profile" className="w-full h-full object-cover" />
                   ) : (
                     <User className="w-6 h-6 text-muted-foreground" />
                   )}

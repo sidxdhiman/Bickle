@@ -14,7 +14,8 @@ const videoUpload = makeUpload('videos');
 const musicUpload = makeUpload('music');
 
 // Public reads power the Sid-Art showcase site. optionalScope partitions them:
-// guests only ever see their session's work, everyone else sees non-guest art.
+// logged-in profiles see only their own art, guests only their session's
+// copies, and anonymous visitors only the showcase profile's work.
 router.get('/blogs', optionalScope, getBlogs);
 router.get('/blogs/:id', optionalScope, getBlog);
 router.get('/photos', optionalScope, getPhotos);

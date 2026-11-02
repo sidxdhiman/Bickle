@@ -14,11 +14,12 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '3mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 app.use('/api/lists', require('./routes/listRoutes'));
 app.use('/api/tasks', require('./routes/taskRoutes'));
 app.use('/api/guest', require('./routes/guestRoutes'));
@@ -66,6 +67,12 @@ const cleanupPartitions = async () => {
   } catch (error) {
     console.warn('Stale guest session purge failed:', error.message);
   }
+  try {
+    const { ensureProfileAccounts } = require('./utils/seedProfiles');
+    await ensureProfileAccounts();
+  } catch (error) {
+    console.warn('Profile seed failed:', error.message);
+  }
 };
 
 const startServer = async () => {
@@ -79,7 +86,7 @@ const startServer = async () => {
     await mongoose.connect(mongoURI);
     console.log('Connected to MongoDB');
     await cleanupPartitions();
-    app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    app.listen(PORT, '127.0.0.1', () => console.log(`Server running on port ${PORT}`));
     return;
   } catch (err) {
     console.error('MongoDB connection error:', err.message || err);
@@ -93,7 +100,7 @@ const startServer = async () => {
         await mongoose.connect(memUri);
         console.log('Connected to in-memory MongoDB');
         await cleanupPartitions();
-        app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+        app.listen(PORT, '127.0.0.1', () => console.log(`Server running on port ${PORT}`));
         // stop in-memory server on exit
         const cleanExit = async () => {
           await mongoose.disconnect();

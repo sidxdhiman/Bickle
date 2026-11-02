@@ -5,7 +5,9 @@ import { PAGES } from '../config/pages';
 import { useAccess } from '../context/AccessContext';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useBackground } from '../hooks/useBackground';
+import { useChatUnread } from '../hooks/useChatUnread';
 import { clearSearchIndex } from '../utils/searchIndex';
+import { endActiveProfile } from '../utils/profileState';
 
 const SIGMA = 0.85;
 
@@ -34,6 +36,7 @@ const Dock = () => {
   const { isGuest, allowedPages, endGuest } = useAccess();
   const [settings] = useDockSettings();
   const [background] = useBackground();
+  const chatUnread = useChatUnread();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -71,6 +74,7 @@ const Dock = () => {
     label: page.label,
     to: page.path,
     Icon: page.icon,
+    badge: page.key === 'chat' && chatUnread > 0 ? chatUnread : 0,
   }));
   const groupStart = items.length;
   if (!isGuest) {
@@ -134,7 +138,7 @@ const Dock = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
-    localStorage.removeItem('profilePic');
+    endActiveProfile();
     clearSearchIndex().catch(() => {});
     navigate('/');
     setTimeout(() => window.location.reload(), 50);
@@ -270,6 +274,11 @@ const Dock = () => {
                   className="mt-1 block h-1 w-1 rounded-full"
                   style={active ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
                 />
+              )}
+              {item.badge > 0 && (
+                <span className="absolute -top-1.5 -right-1 z-30 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center border border-background pointer-events-none">
+                  {item.badge > 9 ? '9+' : item.badge}
+                </span>
               )}
               {showLabels && isHot && (
                 <span

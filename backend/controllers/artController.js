@@ -4,6 +4,7 @@ const ArtBlog = require('../models/ArtBlog');
 const ArtPhoto = require('../models/ArtPhoto');
 const ArtVideo = require('../models/ArtVideo');
 const ArtMusic = require('../models/ArtMusic');
+const User = require('../models/User');
 
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads', 'art');
 const PUBLIC_PREFIX = '/uploads/art/';
@@ -53,7 +54,31 @@ const fail = (res, error) => {
 // Creates land in the caller's partition; public/owner reads see only
 // non-guest art (guestSession: null), guests see only their own session.
 const guestSession = (req) => (req.dataScope ? req.dataScope.guestSession : null);
-const readScope = (req) => ({ guestSession: guestSession(req) });
+
+// Read scope keeps each profile's art private: an authenticated caller sees
+// only their own partition (their guests see only their session's copies).
+// Anonymous reads power the public Sid-Art showcase and resolve to the single
+// showcase profile — the other profile's work never appears in public.
+let showcaseCache = { id: null, at: 0 };
+const SHOWCASE_TTL_MS = 60000;
+
+const getShowcaseUserId = async () => {
+  if (showcaseCache.id && Date.now() - showcaseCache.at < SHOWCASE_TTL_MS) return showcaseCache.id;
+  const owner =
+    (await User.findOne({ showcase: true }).select('_id').lean()) ||
+    (await User.findOne({}).sort({ createdAt: 1 }).select('_id').lean());
+  showcaseCache = { id: owner ? owner._id : null, at: Date.now() };
+  return showcaseCache.id;
+};
+
+const artScope = async (req) => {
+  const scopedUser = req.dataScope ? req.dataScope.user : null;
+  if (scopedUser) {
+    return { user: scopedUser, guestSession: guestSession(req) };
+  }
+  const showcaseId = await getShowcaseUserId();
+  return showcaseId ? { user: showcaseId, guestSession: null } : { guestSession: null };
+};
 
 exports.createBlog = async (req, res) => {
   try {
@@ -163,7 +188,7 @@ exports.createMusic = async (req, res) => {
 
 exports.getBlogs = async (req, res) => {
   try {
-    const blogs = await ArtBlog.find(readScope(req)).sort({ createdAt: -1 });
+    const blogs = await ArtBlog.find(await artScope(req)).sort({ createdAt: -1 });
     res.json(blogs);
   } catch (error) {
     fail(res, error);
@@ -172,7 +197,7 @@ exports.getBlogs = async (req, res) => {
 
 exports.getBlog = async (req, res) => {
   try {
-    const blog = await ArtBlog.findOne({ _id: req.params.id, ...readScope(req) });
+    const blog = await ArtBlog.findOne({ _id: req.params.id, ...(await artScope(req)) });
     if (!blog) return res.status(404).json({ message: 'Post not found' });
     res.json(blog);
   } catch (error) {
@@ -182,7 +207,7 @@ exports.getBlog = async (req, res) => {
 
 exports.getPhotos = async (req, res) => {
   try {
-    const photos = await ArtPhoto.find(readScope(req)).sort({ takenAt: -1, createdAt: -1 });
+    const photos = await ArtPhoto.find(await artScope(req)).sort({ takenAt: -1, createdAt: -1 });
     res.json(photos);
   } catch (error) {
     fail(res, error);
@@ -191,7 +216,7 @@ exports.getPhotos = async (req, res) => {
 
 exports.getVideos = async (req, res) => {
   try {
-    const videos = await ArtVideo.find(readScope(req)).sort({ recordedAt: -1, createdAt: -1 });
+    const videos = await ArtVideo.find(await artScope(req)).sort({ recordedAt: -1, createdAt: -1 });
     res.json(videos);
   } catch (error) {
     fail(res, error);
@@ -200,7 +225,7 @@ exports.getVideos = async (req, res) => {
 
 exports.getMusic = async (req, res) => {
   try {
-    const tracks = await ArtMusic.find(readScope(req)).sort({ madeAt: -1, createdAt: -1 });
+    const tracks = await ArtMusic.find(await artScope(req)).sort({ madeAt: -1, createdAt: -1 });
     res.json(tracks);
   } catch (error) {
     fail(res, error);

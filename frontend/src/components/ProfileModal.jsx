@@ -7,6 +7,8 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { GRANTABLE_PAGES } from '../config/pages';
 import { clearSearchIndex } from '../utils/searchIndex';
+import { useCurrentUser, refreshUser } from '../hooks/useCurrentUser';
+import { endActiveProfile } from '../utils/profileState';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -138,7 +140,10 @@ const TABS = [
 const ProfileModal = ({ isOpen, onClose }) => {
   const [tab, setTab] = useState('profile');
   const [profilePic, setProfilePic] = useState(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const currentUser = useCurrentUser();
   const navigate = useNavigate();
+  const avatar = currentUser?.avatar || profilePic;
 
   // Grant access form
   const [label, setLabel] = useState('');
@@ -214,12 +219,37 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const handleFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setSavingAvatar(true);
     const reader = new FileReader();
     reader.onload = () => {
-      const data = reader.result;
-      localStorage.setItem('profilePic', data);
-      setProfilePic(data);
+      const img = new Image();
+      img.onload = async () => {
+        // Square 256px crop keeps the payload small enough for the JSON API.
+        const size = 256;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        const data = canvas.toDataURL('image/jpeg', 0.85);
+        localStorage.setItem('profilePic', data);
+        setProfilePic(data);
+        try {
+          await axios.put('/auth/me', { avatar: data });
+          await refreshUser();
+        } catch (error) {
+          console.error('Avatar could not be saved to your profile:', error);
+        } finally {
+          setSavingAvatar(false);
+        }
+      };
+      img.onerror = () => setSavingAvatar(false);
+      img.src = reader.result;
     };
+    reader.onerror = () => setSavingAvatar(false);
     reader.readAsDataURL(file);
   };
 
@@ -227,7 +257,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
-    localStorage.removeItem('profilePic');
+    endActiveProfile();
     clearSearchIndex().catch(() => {});
     onClose();
     navigate('/');
@@ -334,7 +364,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
         pageAccess: pageAccessMap,
         sharedItems,
       });
-      const link = `${window.location.origin}/guest/${res.data.token}`;
+      const link = `${window.location.origin}/bickle/guest/${res.data.token}`;
       setCreatedLink(link);
       setSessions((prev) => [res.data, ...prev]);
       setLabel('');
@@ -380,15 +410,17 @@ const ProfileModal = ({ isOpen, onClose }) => {
         <div className="flex items-center justify-between p-5 sm:p-6 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full overflow-hidden border border-border bg-accent flex items-center justify-center">
-              {profilePic ? (
-                <img src={profilePic} alt="profile" className="w-full h-full object-cover" />
+              {avatar ? (
+                <img src={avatar} alt="profile" className="w-full h-full object-cover" />
               ) : (
                 <User className="w-5 h-5 text-muted-foreground" />
               )}
             </div>
             <div>
               <h2 className="text-lg font-bold leading-tight">Account & Sharing</h2>
-              <p className="text-xs text-muted-foreground">Manage your profile and temporary guest access</p>
+              <p className="text-xs text-muted-foreground">
+                {currentUser?.username ? `${currentUser.username}'s ` : ''}profile, sharing and guest access
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-muted-foreground hover:text-foreground hover:bg-accent rounded-full transition-colors">
@@ -425,19 +457,19 @@ const ProfileModal = ({ isOpen, onClose }) => {
           {tab === 'profile' && (
             <div className="max-w-md mx-auto flex flex-col items-center gap-4">
               <div className="w-28 h-28 rounded-full overflow-hidden border border-border bg-accent">
-                {profilePic ? (
-                  <img src={profilePic} alt="profile" className="w-full h-full object-cover" />
+                {avatar ? (
+                  <img src={avatar} alt="profile" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground">No image</div>
                 )}
               </div>
               <div className="text-center">
-                <p className="text-lg font-semibold">Sidharth</p>
-                <p className="text-sm text-muted-foreground">Pro Plan</p>
+                <p className="text-lg font-semibold">{currentUser?.username || 'Bickle'}</p>
+                <p className="text-sm text-muted-foreground">{currentUser?.email || 'Signed in'}</p>
               </div>
               <label className="w-full text-center px-4 py-2.5 bg-secondary border border-border rounded-lg cursor-pointer hover:bg-accent transition-colors text-sm font-medium">
-                Change profile picture
-                <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
+                {savingAvatar ? 'Saving profile picture...' : 'Change profile picture'}
+                <input type="file" accept="image/*" onChange={handleFile} className="hidden" disabled={savingAvatar} />
               </label>
               <button
                 onClick={handleLogout}
@@ -819,11 +851,11 @@ const ProfileModal = ({ isOpen, onClose }) => {
                       <div className="mt-3 flex gap-2">
                         <input
                           readOnly
-                          value={`${window.location.origin}/guest/${session.token}`}
+                          value={`${window.location.origin}/bickle/guest/${session.token}`}
                           className="flex-1 px-3 py-1.5 bg-background border border-border rounded-md text-[11px] font-mono"
                         />
                         <button
-                          onClick={() => handleCopy(`${window.location.origin}/guest/${session.token}`)}
+                          onClick={() => handleCopy(`${window.location.origin}/bickle/guest/${session.token}`)}
                           className="shrink-0 p-1.5 bg-secondary border border-border rounded-md hover:bg-accent"
                           title="Copy link"
                         >

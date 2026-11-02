@@ -25,6 +25,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  // The single profile whose art is published on the public Sid-Art showcase.
+  showcase: {
+    type: Boolean,
+    default: false,
+  },
   preferences: {
     theme: {
       type: String,

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import exifr from 'exifr';
 
-const apiOrigin = () => (axios.defaults.baseURL || 'http://localhost:5000/api').replace(/\/api\/?$/, '');
+const apiOrigin = () => (axios.defaults.baseURL || '/bickle/api').replace(/\/api\/?$/, '');
 
 export const mediaUrl = (path) => {
   if (!path) return '';

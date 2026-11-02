@@ -12,6 +12,7 @@ import {
   FilePen,
   Palette,
   Workflow,
+  MessageCircle,
 } from 'lucide-react';
 
 export const PAGES = [
@@ -21,6 +22,7 @@ export const PAGES = [
   { key: 'focus', label: 'Focus', path: '/focus', icon: Timer },
   { key: 'calendar', label: 'Calendar', path: '/calendar', icon: CalendarIcon },
   { key: 'notes', label: 'Notes', path: '/notes', icon: FileText },
+  { key: 'chat', label: 'Chat', path: '/chat', icon: MessageCircle },
   { key: 'whiteboard', label: 'Whiteboard', path: '/whiteboard', icon: PenTool },
   { key: 'pdf-editor', label: 'PDF Editor', path: '/pdf-editor', icon: FilePen },
   { key: 'sleep', label: 'Sleep', path: '/sleep', icon: Moon },
@@ -32,8 +34,9 @@ export const PAGES = [
 
 export const ALL_PAGE_KEYS = PAGES.map((page) => page.key);
 
-// Dashboard is the owner's home and is not individually grantable.
-export const GRANTABLE_PAGES = PAGES.filter((page) => page.key !== 'dashboard');
+// Dashboard is each profile's home; chat belongs to the profiles themselves.
+// Neither is grantable to a guest session.
+export const GRANTABLE_PAGES = PAGES.filter((page) => page.key !== 'dashboard' && page.key !== 'chat');
 export const GRANTABLE_PAGE_KEYS = GRANTABLE_PAGES.map((page) => page.key);
 
 export const pageByKey = (key) => PAGES.find((page) => page.key === key);
@@ -50,10 +53,14 @@ export const API_PREFIX_PAGE_MAP = [
   ['/habits', 'habits'],
   ['/whiteboards', 'whiteboard'],
   ['/art', 'art'],
+  ['/chat', 'chat'],
 ];
 
 export const pageKeyForApiUrl = (url) => {
-  const path = (url || '').replace(/^https?:\/\/[^/]+/, '').replace(/^\/api/, '');
+  const path = (url || '')
+    .replace(/^https?:\/\/[^/]+/, '')
+    .replace(/^\/bickle\/api/, '')
+    .replace(/^\/api/, '');
   for (const [prefix, key] of API_PREFIX_PAGE_MAP) {
     if (path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`)) {
       return key;

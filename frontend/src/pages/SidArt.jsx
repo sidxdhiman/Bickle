@@ -4,9 +4,17 @@ import {
   Phone, Mail, Linkedin, Github, X, MapPin, CalendarDays,
   Camera, Image as ImageIcon, Clapperboard, Music4, FileText,
 } from 'lucide-react';
-import axios from 'axios';
 import MusicPlayer from '../components/art/MusicPlayer';
 import { mediaUrl, formatDate, formatDuration } from '../utils/art';
+
+// The showcase is always public: never attach a profile's session token, so
+// the backend serves only the showcase profile's published work — a signed-in
+// profile browsing this site still sees the public portfolio, not their vault.
+const publicGet = async (path) => {
+  const response = await fetch(`/bickle/api${path}`);
+  if (!response.ok) throw new Error(`Request failed with ${response.status}`);
+  return response.json();
+};
 
 const EASE = [0.22, 1, 0.36, 1];
 const CREAM = '#F7F2E7';
@@ -150,12 +158,12 @@ const SidArt = () => {
   const loadContent = async () => {
     try {
       const [blogs, photos, videos, music] = await Promise.all([
-        axios.get('/art/blogs'),
-        axios.get('/art/photos'),
-        axios.get('/art/videos'),
-        axios.get('/art/music'),
+        publicGet('/art/blogs'),
+        publicGet('/art/photos'),
+        publicGet('/art/videos'),
+        publicGet('/art/music'),
       ]);
-      setContent({ blogs: blogs.data, photos: photos.data, videos: videos.data, music: music.data });
+      setContent({ blogs, photos, videos, music });
       setLoadError('');
     } catch (error) {
       setLoadError('The gallery could not be reached right now.');
