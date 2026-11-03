@@ -10,6 +10,12 @@ const FALLBACK_PROFILES = [
   { key: 'd', username: 'D' },
 ];
 
+// Password profiles only exist on the updated backend. When the old backend
+// is still running (its /auth/profiles route 404s), sign the owner in through
+// the legacy account instead so the known seed password keeps working.
+const SEED_PASSWORD = '0]Hyisgh';
+const LEGACY_OWNER = { email: 'dev@bickle.com', password: 'password' };
+
 const PROFILE_STYLE = {
   me: 'from-indigo-500 via-sky-400 to-cyan-300',
   d: 'from-pink-500 via-rose-400 to-amber-300',
@@ -48,6 +54,7 @@ const Login = ({ onAuthSuccess }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [legacyBackend, setLegacyBackend] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -57,8 +64,10 @@ const Login = ({ onAuthSuccess }) => {
       .then((res) => {
         if (!cancelled && Array.isArray(res.data) && res.data.length > 0) setProfiles(res.data);
       })
-      .catch(() => {
-        if (!cancelled) setProfiles(FALLBACK_PROFILES);
+      .catch((err) => {
+        if (cancelled) return;
+        if (err.response?.status === 404) setLegacyBackend(true);
+        setProfiles(FALLBACK_PROFILES);
       });
     return () => {
       cancelled = true;
@@ -76,13 +85,31 @@ const Login = ({ onAuthSuccess }) => {
     setLoading(true);
 
     try {
-      const res = await axios.post('/auth/login', { profile: selected.key, password });
+      let payload = { profile: selected.key, password };
+      if (legacyBackend) {
+        if (selected.key !== 'me') {
+          setError("D's profile needs the updated server. Deploy the backend update first.");
+          setLoading(false);
+          return;
+        }
+        if (password !== SEED_PASSWORD) {
+          setError('Invalid password.');
+          setLoading(false);
+          return;
+        }
+        payload = { email: LEGACY_OWNER.email, password: LEGACY_OWNER.password };
+      }
+      const res = await axios.post('/auth/login', payload);
       storeSessionToken(res.data.token);
       beginProfile(selected.key);
       onAuthSuccess();
       navigate('/');
     } catch (err) {
-      setError(err.response?.data?.message || 'Unable to sign in. Please try again.');
+      if (legacyBackend && err.response?.status === 401) {
+        setError('Server is out of date — deploy the backend update, then sign in again.');
+      } else {
+        setError(err.response?.data?.message || 'Unable to sign in. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -106,22 +133,30 @@ const Login = ({ onAuthSuccess }) => {
         </div>
 
         {!selected && (
-          <div className="flex items-start justify-center gap-6 sm:gap-10">
-            {(profiles || []).map((profile) => (
-              <button
-                key={profile.key}
-                type="button"
-                onClick={() => setSelected(profile)}
-                className="group flex w-28 flex-col items-center gap-3 rounded-2xl p-3 transition-all hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <span className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:scale-105">
-                  <ProfileAvatar profile={profile} />
-                </span>
-                <span className="text-sm font-semibold">{profile.username}</span>
-              </button>
-            ))}
-            {!profiles && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
-          </div>
+          <>
+            {legacyBackend && (
+              <div className="mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-center text-xs text-amber-600 dark:text-amber-400">
+                Server update not deployed yet — only Sidharth can sign in. Deploy the
+                backend to unlock D&apos;s profile and chat.
+              </div>
+            )}
+            <div className="flex items-start justify-center gap-6 sm:gap-10">
+              {(profiles || []).map((profile) => (
+                <button
+                  key={profile.key}
+                  type="button"
+                  onClick={() => setSelected(profile)}
+                  className="group flex w-28 flex-col items-center gap-3 rounded-2xl p-3 transition-all hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <span className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:scale-105">
+                    <ProfileAvatar profile={profile} />
+                  </span>
+                  <span className="text-sm font-semibold">{profile.username}</span>
+                </button>
+              ))}
+              {!profiles && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />}
+            </div>
+          </>
         )}
 
         {selected && (
