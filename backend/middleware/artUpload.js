@@ -29,9 +29,15 @@ const makeUpload = (kind) => {
   const config = KINDS[kind];
   const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-      const dir = path.join(UPLOAD_ROOT, config.dir);
-      fs.mkdirSync(dir, { recursive: true });
-      cb(null, dir);
+      // Route failures through cb — a synchronous throw here would escape
+      // multer and crash the process instead of failing the request.
+      try {
+        const dir = path.join(UPLOAD_ROOT, config.dir);
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      } catch (error) {
+        cb(error);
+      }
     },
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname).slice(0, 12).toLowerCase();

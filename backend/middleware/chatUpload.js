@@ -42,8 +42,15 @@ const kindOf = (mimetype = '', filename = '') => {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    fs.mkdirSync(CHAT_UPLOAD_DIR, { recursive: true });
-    cb(null, CHAT_UPLOAD_DIR);
+    // Never throw here: a synchronous exception inside multer's callback
+    // escapes Express and takes the whole process down. Route it through cb
+    // so the request fails with a normal error response instead.
+    try {
+      fs.mkdirSync(CHAT_UPLOAD_DIR, { recursive: true });
+      cb(null, CHAT_UPLOAD_DIR);
+    } catch (error) {
+      cb(error);
+    }
   },
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).slice(0, 12).toLowerCase();
