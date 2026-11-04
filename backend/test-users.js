@@ -5,6 +5,7 @@
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const { spawn } = require('child_process');
 const mongoose = require('mongoose');
+const { Message } = require('./models/Chat');
 
 const BASE = 'http://127.0.0.1:5097/api';
 const SEED_PASSWORD = process.env.SEED_PASSWORD || '0]Hyisgh';
@@ -32,6 +33,9 @@ const check = (cond, msg, extra) => {
 (async () => {
   const mongod = await MongoMemoryServer.create();
   const uri = mongod.getUri();
+  // The test process shares the memory database so it can backdate expiry
+  // fields and assert the server's purge behaviour.
+  await mongoose.connect(uri);
   const server = spawn('node', ['server.js'], {
     cwd: __dirname,
     env: { ...process.env, MONGODB_URI: uri, PORT: '5097', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
@@ -163,7 +167,102 @@ const check = (cond, msg, extra) => {
     check(guestChat.status === 403, 'guest blocked from /chat', guestChat.data);
     const guestUnread = await api('GET', '/chat/unread-count', { token: gs.data.token });
     check(guestUnread.status === 403, 'guest blocked from /chat/unread-count', guestUnread.data);
+    const guestSettings = await api('PUT', `/chat/${convId}/settings`, { token: gs.data.token, body: { mode: 'off' } });
+    check(guestSettings.status === 403, 'guest cannot change chat settings', guestSettings.data);
     await api('DELETE', `/guest/${gs.data._id}`, { token: meToken });
+
+    // --- Chat settings, disappearing messages and attachments ---
+    const meConvos2 = await api('GET', '/chat', { token: meToken });
+    check(
+      meConvos2.status === 200 && meConvos2.data.length === 1 && meConvos2.data[0].peer.username === 'D',
+      'the registered stranger never appears as a chat contact',
+      meConvos2.data && meConvos2.data.map((c) => c.peer.username)
+    );
+
+    // Either profile may change the disappearing policy; it posts a notice.
+    const setMode = await api('PUT', `/chat/${convId}/settings`, { token: dToken, body: { mode: '24h' } });
+    check(setMode.status === 200 && setMode.data.mode === '24h', 'D changed the chat settings', setMode.data && setMode.data.mode);
+    check(
+      setMode.data.message && setMode.data.message.type === 'system' && /changed the settings to 24 hours/.test(setMode.data.message.text),
+      'settings change posted a system message',
+      setMode.data.message
+    );
+    const badMode = await api('PUT', `/chat/${convId}/settings`, { token: meToken, body: { mode: 'forever' } });
+    check(badMode.status === 400, 'invalid disappearing mode rejected', badMode.data);
+    const modeListed = await api('GET', '/chat', { token: meToken });
+    check(modeListed.data[0].disappearMode === '24h', 'conversation list exposes the active mode', modeListed.data[0]);
+
+    // Messages sent under a timed policy snapshot their absolute expiry...
+    const timed = await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'expires soon' } });
+    check(
+      timed.status === 201 && timed.data.disappear === '24h' && !!timed.data.expiresAt,
+      'timed message stamped with an expiry',
+      { disappear: timed.data.disappear, expiresAt: timed.data.expiresAt }
+    );
+
+    // ...and vanish from reads once it passes (backdate to simulate the wait).
+    await Message.updateOne({ _id: timed.data._id }, { expiresAt: new Date(Date.now() - 1000) });
+    const afterPurge = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      afterPurge.data.every((m) => m.text !== 'expires soon'),
+      'expired message purged from reads',
+      afterPurge.data.map((m) => m.text)
+    );
+
+    // 'viewed': kept through the reader's grace window, then purged.
+    const setViewed = await api('PUT', `/chat/${convId}/settings`, { token: meToken, body: { mode: 'viewed' } });
+    check(setViewed.status === 200 && setViewed.data.mode === 'viewed', 'me switched the chat to after-viewing', setViewed.data && setViewed.data.mode);
+    const vanish = await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'seen once' } });
+    check(vanish.data.disappear === 'viewed' && !vanish.data.expiresAt, 'viewed message has no timer before it is read', vanish.data.disappear);
+    await api('POST', `/chat/${convId}/read`, { token: dToken, body: {} });
+    const stillThere = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(stillThere.data.some((m) => m.text === 'seen once'), 'message stays during the read grace window', stillThere.data.map((m) => m.text));
+    await Message.updateOne({ _id: vanish.data._id }, { viewedAt: new Date(Date.now() - 60000) });
+    const goneViewed = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(goneViewed.data.every((m) => m.text !== 'seen once'), 'fully viewed message purged after the grace window', goneViewed.data.map((m) => m.text));
+
+    // File attachments round-trip; dangerous types are rejected.
+    const fileForm = new FormData();
+    fileForm.append('text', 'here is a file');
+    fileForm.append('file', new Blob(['hello chat'], { type: 'text/plain' }), 'note.txt');
+    const uploadRes = await fetch(`${BASE}/chat/${convId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${meToken}` },
+      body: fileForm,
+    });
+    let uploadData = null;
+    try { uploadData = await uploadRes.json(); } catch { /* no body */ }
+    check(
+      uploadRes.status === 201 && uploadData.attachment && uploadData.attachment.url && uploadData.attachment.kind === 'file',
+      'file attachment uploaded and stored on the message',
+      uploadData && uploadData.attachment
+    );
+    if (uploadData && uploadData.attachment) {
+      const served = await fetch(`http://127.0.0.1:5097${uploadData.attachment.url}`);
+      check(served.status === 200, 'attachment is served from /uploads', served.status);
+    }
+    const htmlForm = new FormData();
+    htmlForm.append('file', new Blob(['<html></html>'], { type: 'text/html' }), 'evil.html');
+    const htmlUpload = await fetch(`${BASE}/chat/${convId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${meToken}` },
+      body: htmlForm,
+    });
+    check(htmlUpload.status === 400, 'html attachment rejected', htmlUpload.status);
+
+    // Unread responses carry the newest message so the in-app popup can
+    // render a preview without fetching the whole thread.
+    await api('POST', `/chat/${convId}/messages`, { token: dToken, body: { text: 'ping for toast' } });
+    const latestCheck = await api('GET', '/chat/unread-count', { token: meToken });
+    check(
+      latestCheck.data.count >= 1 && latestCheck.data.latest && latestCheck.data.latest.sender === 'D' && latestCheck.data.latest.preview === 'ping for toast',
+      'unread response carries the latest message for toasts',
+      latestCheck.data
+    );
+
+    // Non-participants cannot touch the settings either.
+    const strangerSettings = await api('PUT', `/chat/${convId}/settings`, { token: stranger.data.token, body: { mode: 'off' } });
+    check(strangerSettings.status === 404, 'stranger cannot change chat settings', strangerSettings.data);
 
     // --- D deletes her data: mine must be untouched ---
     const del = await api('DELETE', '/settings/delete-all-data', { token: dToken });
@@ -181,6 +280,7 @@ const check = (cond, msg, extra) => {
     console.error('ERROR:', error);
   } finally {
     server.kill();
+    await mongoose.disconnect();
     await mongod.stop();
   }
 

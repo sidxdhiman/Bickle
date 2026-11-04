@@ -3,10 +3,12 @@ import axios from 'axios';
 import { useAccess } from '../context/AccessContext';
 
 // One shared poller for chat unread counts, no matter how many components
-// (top nav bell, dock tile, sidebar row) display the badge.
+// (top nav bell, dock tile, sidebar row, arrival toast) display them.
 let count = 0;
 let timer = null;
+let arrivalSeq = 0;
 const listeners = new Set();
+const arrivalListeners = new Set();
 
 const publish = () => listeners.forEach((listener) => listener());
 
@@ -14,6 +16,14 @@ const poll = async () => {
   try {
     const res = await axios.get('/chat/unread-count');
     const next = typeof res.data?.count === 'number' ? res.data.count : 0;
+    const rose = next > count;
+    if (rose && res.data.latest) {
+      // Edge-triggered: only a rising count emits an arrival, so a steady
+      // unread state never re-pops the toast.
+      arrivalSeq += 1;
+      const arrival = { ...res.data.latest, seq: arrivalSeq };
+      arrivalListeners.forEach((listener) => listener(arrival));
+    }
     if (next !== count) {
       count = next;
       publish();
@@ -32,7 +42,7 @@ const ensurePolling = () => {
   if (timer) return;
   timer = setInterval(() => {
     if (document.visibilityState === 'visible') poll();
-  }, 10000);
+  }, 4000);
 };
 
 export const useChatUnread = () => {
@@ -54,6 +64,13 @@ export const useChatUnread = () => {
   }, [isGuest]);
 
   return isGuest ? 0 : count;
+};
+
+// Subscribe to "the other profile just messaged me" events (toast popup).
+// Returns an unsubscribe function.
+export const onChatArrival = (listener) => {
+  arrivalListeners.add(listener);
+  return () => arrivalListeners.delete(listener);
 };
 
 export default useChatUnread;

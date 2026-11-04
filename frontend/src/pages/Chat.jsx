@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Loader2, MessageCircle, SendHorizontal } from 'lucide-react';
+import { Check, Download, FileText, Loader2, MessageCircle, Paperclip, SendHorizontal, Timer, X } from 'lucide-react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 const GRADIENTS = [
@@ -13,6 +13,39 @@ const GRADIENTS = [
 
 const gradientFor = (name = '') =>
   GRADIENTS[[...name].reduce((sum, char) => sum + char.charCodeAt(0), 0) % GRADIENTS.length];
+
+// Matches the backend's DISAPPEAR_MODES; either profile may pick any of them.
+const DISAPPEAR_OPTIONS = [
+  { key: 'off', label: 'Off', hint: 'Keep messages forever' },
+  { key: '1h', label: 'After 1 hour' },
+  { key: '24h', label: 'After 24 hours' },
+  { key: '7d', label: 'After 1 week' },
+  { key: 'viewed', label: 'After viewing' },
+];
+
+const modePhrase = (key) =>
+  ({
+    '1h': 'after 1 hour',
+    '24h': 'after 24 hours',
+    '7d': 'after 1 week',
+    viewed: 'after viewing',
+  }[key] || '');
+
+// Mirrors the backend purge rules so disappearing messages leave the screen
+// at the same moment they leave the server, even between polls.
+const VIEW_GRACE_MS = 45 * 1000;
+const isVisibleNow = (message) => {
+  const now = Date.now();
+  if (message.expiresAt && new Date(message.expiresAt).getTime() <= now) return false;
+  if (message.viewedAt && new Date(message.viewedAt).getTime() + VIEW_GRACE_MS <= now) return false;
+  return true;
+};
+
+const formatSize = (bytes) => {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const Avatar = ({ user, size = 'w-10 h-10', text = 'text-sm' }) => (
   <span className={`${size} shrink-0 rounded-full overflow-hidden bg-gradient-to-br ${gradientFor(user?.username)} p-[2px]`}>
@@ -40,12 +73,22 @@ const Chat = () => {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [updatingSettings, setUpdatingSettings] = useState(false);
 
   const activeIdRef = useRef(null);
   const messagesRef = useRef(null);
   const textareaRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const active = conversations.find((c) => c._id === activeId) || null;
+  const visibleMessages = messages.filter(isVisibleNow);
+
+  // Attachment URLs are stored server-relative (/uploads/...); the API origin
+  // (e.g. /bickle) turns them into paths nginx and the dev proxy both serve.
+  const uploadOrigin = (axios.defaults.baseURL || '').replace(/\/api\/?$/, '');
+  const resolveUploadUrl = (url) => (url && url.startsWith('/uploads') ? `${uploadOrigin}${url}` : url);
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -89,6 +132,8 @@ const Chat = () => {
   useEffect(() => {
     setMessages([]);
     setDraft('');
+    setPendingFile(null);
+    setSettingsOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (!activeId) return undefined;
     let cancelled = false;
@@ -164,23 +209,34 @@ const Chat = () => {
   const handleSend = async (event) => {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || !activeId || sending) return;
+    if ((!text && !pendingFile) || !activeId || sending) return;
 
     setSending(true);
     try {
-      const res = await axios.post(`/chat/${activeId}/messages`, { text });
+      let res;
+      if (pendingFile) {
+        const form = new FormData();
+        if (text) form.append('text', text);
+        form.append('file', pendingFile);
+        res = await axios.post(`/chat/${activeId}/messages`, form);
+      } else {
+        res = await axios.post(`/chat/${activeId}/messages`, { text });
+      }
+      const sentMessage = res.data;
       setMessages((prev) =>
-        prev.some((m) => m._id === res.data._id) ? prev : [...prev, res.data]
+        prev.some((m) => m._id === sentMessage._id) ? prev : [...prev, sentMessage]
       );
       setDraft('');
+      setPendingFile(null);
       if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      const preview = sentMessage.text || sentMessage.attachment?.name || 'Attachment';
       setConversations((prev) =>
         prev.map((c) =>
           c._id === activeId
             ? {
                 ...c,
-                lastMessage: { text: res.data.text, sender: res.data.sender, at: res.data.createdAt },
-                updatedAt: res.data.createdAt,
+                lastMessage: { text: preview, sender: sentMessage.sender, at: sentMessage.createdAt },
+                updatedAt: sentMessage.createdAt,
               }
             : c
         )
@@ -192,7 +248,80 @@ const Chat = () => {
     }
   };
 
+  const changeMode = async (mode) => {
+    if (updatingSettings || !activeId) return;
+    setUpdatingSettings(true);
+    try {
+      const res = await axios.put(`/chat/${activeId}/settings`, { mode });
+      setSettingsOpen(false);
+      const systemMessage = res.data.message;
+      setMessages((prev) =>
+        prev.some((m) => m._id === systemMessage._id) ? prev : [...prev, systemMessage]
+      );
+      setConversations((prev) =>
+        prev.map((c) =>
+          c._id === activeId
+            ? {
+                ...c,
+                disappearMode: res.data.mode,
+                lastMessage: { text: systemMessage.text, sender: systemMessage.sender, at: systemMessage.createdAt },
+                updatedAt: systemMessage.createdAt,
+              }
+            : c
+        )
+      );
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not update chat settings.');
+    } finally {
+      setUpdatingSettings(false);
+    }
+  };
+
   const selectConversation = (id) => setActiveId(id);
+
+  const renderAttachment = (message) => {
+    const attachment = message.attachment;
+    if (!attachment) return null;
+    const url = resolveUploadUrl(attachment.url);
+
+    if (attachment.kind === 'image') {
+      return (
+        <img
+          src={url}
+          alt={attachment.name || 'image'}
+          loading="lazy"
+          onClick={() => window.open(url, '_blank')}
+          className="block max-w-[240px] max-h-[300px] object-cover rounded-xl cursor-pointer border border-border/40"
+        />
+      );
+    }
+    if (attachment.kind === 'video') {
+      return <video src={url} controls playsInline className="block max-w-[260px] rounded-xl" />;
+    }
+    if (attachment.kind === 'audio') {
+      return <audio src={url} controls className="w-56 h-9" />;
+    }
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        download
+        className="flex items-center gap-2.5 rounded-xl bg-background/40 border border-border/50 px-3 py-2 transition hover:bg-background/70"
+      >
+        <FileText className="w-5 h-5 shrink-0 opacity-80" />
+        <span className="min-w-0">
+          <span className="block text-xs font-medium truncate max-w-[160px]">{attachment.name}</span>
+          <span className="block text-[10px] text-muted-foreground">{formatSize(attachment.size)}</span>
+        </span>
+        <Download className="w-4 h-4 shrink-0 opacity-60" />
+      </a>
+    );
+  };
+
+  const activeMode = active ? active.disappearMode || 'off' : 'off';
+  const activePhrase = modePhrase(activeMode);
 
   return (
     <div className="flex h-full overflow-hidden rounded-2xl border border-border bg-card/60 backdrop-blur-xl shadow-lg shadow-black/5">
@@ -240,6 +369,9 @@ const Chat = () => {
                   <span className="flex-1 text-xs text-muted-foreground truncate">
                     {conversation.lastMessage ? conversation.lastMessage.text : 'Say hi'}
                   </span>
+                  {conversation.disappearMode && conversation.disappearMode !== 'off' && (
+                    <Timer className="w-3 h-3 shrink-0 text-muted-foreground" />
+                  )}
                   {conversation.unreadCount > 0 && (
                     <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
                       {conversation.unreadCount}
@@ -270,12 +402,58 @@ const Chat = () => {
               <Avatar user={active.peer} />
               <div className="min-w-0">
                 <p className="text-sm font-semibold leading-tight truncate">{active.peer.username}</p>
-                <p className="text-[11px] text-muted-foreground">Private conversation</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {activePhrase ? `Disappears ${activePhrase}` : 'Private conversation'}
+                </p>
+              </div>
+              <div className="ml-auto relative">
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen((open) => !open)}
+                  aria-label="Chat settings"
+                  className={`p-2 rounded-lg transition-colors ${
+                    settingsOpen || activeMode !== 'off'
+                      ? 'text-primary bg-primary/10'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                  }`}
+                >
+                  <Timer className="w-4 h-4" />
+                </button>
+                {settingsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setSettingsOpen(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-20 w-56 rounded-xl border border-border bg-card py-1 shadow-xl shadow-black/10">
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Delete messages
+                      </p>
+                      {DISAPPEAR_OPTIONS.map((option) => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          disabled={updatingSettings}
+                          onClick={() => changeMode(option.key)}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 text-sm text-left transition hover:bg-accent disabled:opacity-50"
+                        >
+                          <span>
+                            {option.label}
+                            {option.hint && (
+                              <span className="block text-[10px] text-muted-foreground">{option.hint}</span>
+                            )}
+                          </span>
+                          {activeMode === option.key && <Check className="w-4 h-4 shrink-0 text-primary" />}
+                        </button>
+                      ))}
+                      <p className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border/60 mt-1">
+                        Either of you can change this. New messages follow the new rule; a notice is posted to the chat.
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </header>
 
             <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-4">
-              {messages.length === 0 ? (
+              {visibleMessages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-3">
                   <Avatar user={active.peer} size="w-16 h-16" text="text-xl" />
                   <p className="font-semibold">{active.peer.username}</p>
@@ -285,7 +463,17 @@ const Chat = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {messages.map((message) => {
+                  {visibleMessages.map((message) => {
+                    if (message.type === 'system') {
+                      return (
+                        <div key={message._id} className="flex justify-center py-1">
+                          <span className="max-w-[85%] text-center text-[11px] text-muted-foreground bg-secondary/70 border border-border/50 rounded-full px-3 py-1">
+                            {message.text}
+                          </span>
+                        </div>
+                      );
+                    }
+
                     const mine = me ? String(message.sender) === String(me._id) : false;
                     return (
                       <div
@@ -301,11 +489,19 @@ const Chat = () => {
                           }`}
                         >
                           {message.text}
+                          {message.attachment && (
+                            <span className={`block ${message.text ? 'mt-1.5' : ''}`}>
+                              {renderAttachment(message)}
+                            </span>
+                          )}
                           <span
-                            className={`mt-1 block text-[10px] ${
+                            className={`mt-1 flex items-center gap-1 text-[10px] ${
                               mine ? 'text-primary-foreground/60' : 'text-muted-foreground'
                             }`}
                           >
+                            {message.disappear && message.disappear !== 'off' && (
+                              <Timer className="w-3 h-3" />
+                            )}
                             {formatTime(message.createdAt)}
                           </span>
                         </div>
@@ -322,32 +518,67 @@ const Chat = () => {
               </div>
             )}
 
-            <form onSubmit={handleSend} className="flex items-end gap-2 border-t border-border p-3">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={draft}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  growTextarea();
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault();
-                    handleSend(event);
-                  }
-                }}
-                placeholder={`Message ${active.peer.username}...`}
-                className="flex-1 max-h-32 resize-none rounded-2xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary"
-              />
-              <button
-                type="submit"
-                disabled={sending || !draft.trim()}
-                aria-label="Send message"
-                className="shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <SendHorizontal className="w-4 h-4" />
-              </button>
+            <form onSubmit={handleSend} className="flex flex-col gap-2 border-t border-border p-3">
+              {pendingFile && (
+                <div className="flex items-center gap-2 self-start max-w-full rounded-xl border border-border bg-secondary/60 px-3 py-2">
+                  <Paperclip className="w-4 h-4 shrink-0 text-muted-foreground" />
+                  <span className="min-w-0 truncate text-xs font-medium">{pendingFile.name}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{formatSize(pendingFile.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPendingFile(null)}
+                    aria-label="Remove attachment"
+                    className="shrink-0 p-0.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+              <div className="flex items-end gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files && event.target.files[0];
+                    if (file) setPendingFile(file);
+                    event.target.value = '';
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current && fileInputRef.current.click()}
+                  aria-label="Attach a file"
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground hover:border-primary"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={draft}
+                  onChange={(event) => {
+                    setDraft(event.target.value);
+                    growTextarea();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      handleSend(event);
+                    }
+                  }}
+                  placeholder={`Message ${active.peer.username}...`}
+                  className="flex-1 max-h-32 resize-none rounded-2xl border border-border bg-background px-4 py-2.5 text-sm outline-none transition focus:border-primary"
+                />
+                <button
+                  type="submit"
+                  disabled={sending || (!draft.trim() && !pendingFile)}
+                  aria-label="Send message"
+                  className="shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <SendHorizontal className="w-4 h-4" />
+                </button>
+              </div>
             </form>
           </>
         ) : (

@@ -1,9 +1,20 @@
-const { Conversation, Message } = require('../models/Chat');
+const { Conversation, Message, DISAPPEAR_MODES } = require('../models/Chat');
 const User = require('../models/User');
 const { PROFILES } = require('../config/profiles');
 const { findProfileUser } = require('../utils/seedProfiles');
+const { kindOf } = require('../middleware/chatUpload');
 
 const MAX_MESSAGE_LENGTH = 4000;
+const VIEW_GRACE_MS = 45 * 1000;
+
+const DISAPPEAR_TTLS = { '1h': 60 * 60 * 1000, '24h': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000 };
+const DISAPPEAR_LABELS = {
+  off: 'Off',
+  '1h': '1 hour',
+  '24h': '24 hours',
+  '7d': '1 week',
+  viewed: 'after viewing',
+};
 
 // Chat is reserved for the real profiles. (Guest tokens are rejected earlier
 // by the page map; this is defense in depth.)
@@ -22,6 +33,36 @@ const findOwnedConversation = async (req) => {
   const conversation = await Conversation.findById(req.params.id);
   if (!conversation || !isParticipant(conversation, req.dataScope.user)) return null;
   return conversation;
+};
+
+const messagePreview = (message) =>
+  message.text || (message.attachment && message.attachment.name) || 'Attachment';
+
+// Removes expired messages (timed policies) and fully viewed ones once their
+// grace window passes, then keeps the conversation preview in sync. Lazy —
+// runs on every read path, which is plenty for a two-profile chat.
+const purgeExpired = async (conversation) => {
+  const now = Date.now();
+  const expired = await Message.find({
+    conversation: conversation._id,
+    $or: [
+      { expiresAt: { $lte: new Date(now) } },
+      { disappear: 'viewed', viewedAt: { $ne: null, $lte: new Date(now - VIEW_GRACE_MS) } },
+    ],
+  }).select('_id');
+
+  if (expired.length === 0) return expired.length;
+
+  await Message.deleteMany({ _id: { $in: expired.map((m) => m._id) } });
+
+  const last = await Message.findOne({ conversation: conversation._id })
+    .sort({ createdAt: -1 })
+    .select('text sender createdAt attachment');
+  conversation.lastMessage = last
+    ? { text: messagePreview(last), sender: last.sender, at: last.createdAt }
+    : { text: '', sender: null, at: null };
+  await conversation.save();
+  return expired.length;
 };
 
 // Lazily creates the 1:1 conversation with every other profile and returns
@@ -59,6 +100,8 @@ exports.listConversations = async (req, res) => {
         conversation = await Conversation.create({ participants: [me, peer._id] });
       }
 
+      await purgeExpired(conversation);
+
       const unreadCount = await Message.countDocuments({
         conversation: conversation._id,
         sender: { $ne: me },
@@ -72,6 +115,7 @@ exports.listConversations = async (req, res) => {
           username: peer.username,
           avatar: peer.avatar || '',
         },
+        disappearMode: conversation.disappearMode || 'off',
         lastMessage: conversation.lastMessage && conversation.lastMessage.text
           ? conversation.lastMessage
           : null,
@@ -87,21 +131,43 @@ exports.listConversations = async (req, res) => {
   }
 };
 
-// Lightweight unread total for nav badges — never creates conversations.
+// Lightweight unread total for nav badges and arrival toasts — never creates
+// conversations. `latest` gives the popup its preview text.
 exports.unreadCount = async (req, res) => {
   try {
     if (denyGuest(req, res)) return;
     const me = req.dataScope.user;
 
     const conversations = await Conversation.find({ participants: me }).select('_id');
-    if (conversations.length === 0) return res.json({ count: 0 });
+    if (conversations.length === 0) return res.json({ count: 0, latest: null });
 
-    const count = await Message.countDocuments({
+    for (const conversation of conversations) {
+      await purgeExpired(conversation);
+    }
+
+    const filter = {
       conversation: { $in: conversations.map((c) => c._id) },
       sender: { $ne: me },
       readBy: { $ne: me },
-    });
-    res.json({ count });
+    };
+    const count = await Message.countDocuments(filter);
+
+    let latest = null;
+    if (count > 0) {
+      const message = await Message.find(filter)
+        .sort({ createdAt: -1 })
+        .limit(1)
+        .populate('sender', 'username');
+      if (message[0]) {
+        latest = {
+          sender: message[0].sender ? message[0].sender.username : 'Someone',
+          preview: messagePreview(message[0]),
+          type: message[0].type,
+          conversation: String(message[0].conversation),
+        };
+      }
+    }
+    res.json({ count, latest });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -112,6 +178,8 @@ exports.getMessages = async (req, res) => {
     if (denyGuest(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
+
+    await purgeExpired(conversation);
 
     const filter = { conversation: conversation._id };
     const after = req.query.after ? new Date(req.query.after) : null;
@@ -135,20 +203,49 @@ exports.sendMessage = async (req, res) => {
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
     const text = typeof req.body.text === 'string' ? req.body.text.trim() : '';
-    if (!text) return res.status(400).json({ message: 'Message text is required' });
     if (text.length > MAX_MESSAGE_LENGTH) {
       return res.status(400).json({ message: `Messages are limited to ${MAX_MESSAGE_LENGTH} characters` });
     }
 
+    let attachment = null;
+    if (req.file) {
+      attachment = {
+        url: `/uploads/chat/${req.file.filename}`,
+        name: (req.file.originalname || 'file').slice(0, 200),
+        mime: req.file.mimetype || 'application/octet-stream',
+        size: req.file.size,
+        kind: kindOf(req.file.mimetype, req.file.originalname),
+      };
+    }
+    if (!text && !attachment) {
+      return res.status(400).json({ message: 'Message text or an attachment is required' });
+    }
+
+    const mode = DISAPPEAR_MODES.includes(conversation.disappearMode)
+      ? conversation.disappearMode
+      : 'off';
+
     const me = req.dataScope.user;
-    const message = await Message.create({
+    const doc = {
       conversation: conversation._id,
       sender: me,
+      type: 'text',
       text,
       readBy: [me],
-    });
+      disappear: mode,
+    };
+    if (mode !== 'off' && mode !== 'viewed') {
+      doc.expiresAt = new Date(Date.now() + DISAPPEAR_TTLS[mode]);
+    }
+    if (attachment) doc.attachment = attachment;
 
-    conversation.lastMessage = { text, sender: me, at: message.createdAt };
+    const message = await Message.create(doc);
+
+    conversation.lastMessage = {
+      text: messagePreview(message),
+      sender: me,
+      at: message.createdAt,
+    };
     await conversation.save();
 
     res.status(201).json(message);
@@ -168,7 +265,65 @@ exports.markRead = async (req, res) => {
       { conversation: conversation._id, sender: { $ne: me }, readBy: { $ne: me } },
       { $addToSet: { readBy: me } }
     );
+
+    // Once every participant has seen a 'viewed' message, start its grace
+    // window; the purge on the next read path deletes it for good.
+    await Message.updateMany(
+      {
+        conversation: conversation._id,
+        disappear: 'viewed',
+        viewedAt: null,
+        readBy: { $all: conversation.participants },
+      },
+      { viewedAt: new Date() }
+    );
+
+    await purgeExpired(conversation);
     res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Either profile may change the disappearing-message policy at any time; the
+// change lands as a system message both sides can see.
+exports.updateSettings = async (req, res) => {
+  try {
+    if (denyGuest(req, res)) return;
+    const conversation = await findOwnedConversation(req);
+    if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
+
+    const mode = req.body && req.body.mode;
+    if (!DISAPPEAR_MODES.includes(mode)) {
+      return res.status(400).json({ message: `Mode must be one of: ${DISAPPEAR_MODES.join(', ')}` });
+    }
+
+    conversation.disappearMode = mode;
+    await conversation.save();
+
+    const me = req.dataScope.user;
+    const user = await User.findById(me).select('username');
+    const label = DISAPPEAR_LABELS[mode];
+    const systemMessage = await Message.create({
+      conversation: conversation._id,
+      sender: me,
+      type: 'system',
+      text: `${user.username} changed the settings to ${label}`,
+      readBy: [me],
+      disappear: mode,
+      ...(mode !== 'off' && mode !== 'viewed'
+        ? { expiresAt: new Date(Date.now() + DISAPPEAR_TTLS[mode]) }
+        : {}),
+    });
+
+    conversation.lastMessage = {
+      text: systemMessage.text,
+      sender: me,
+      at: systemMessage.createdAt,
+    };
+    await conversation.save();
+
+    res.json({ mode, message: systemMessage });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
