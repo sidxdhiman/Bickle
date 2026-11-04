@@ -1,5 +1,7 @@
 const { Conversation, Message } = require('../models/Chat');
 const User = require('../models/User');
+const { PROFILES } = require('../config/profiles');
+const { findProfileUser } = require('../utils/seedProfiles');
 
 const MAX_MESSAGE_LENGTH = 4000;
 
@@ -29,7 +31,16 @@ exports.listConversations = async (req, res) => {
     if (denyGuest(req, res)) return;
     const me = req.dataScope.user;
 
-    const peers = await User.find({ _id: { $ne: me } }).select('username avatar');
+    // Only the profile accounts are chat contacts — stray legacy/test users
+    // in the users collection must never show up in the conversation list.
+    const profileIds = [];
+    for (const profile of PROFILES) {
+      const user = await findProfileUser(profile);
+      if (user && String(user._id) !== String(me)) profileIds.push(user._id);
+    }
+    const peers = profileIds.length
+      ? await User.find({ _id: { $in: profileIds } }).select('username avatar')
+      : [];
     const conversations = await Conversation.find({ participants: me });
 
     const byPeerPair = (conversation) =>
