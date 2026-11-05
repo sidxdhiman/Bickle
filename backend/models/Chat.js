@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
 
 // Disappearing-message policies a profile can pick for a conversation.
-// 'viewed' removes a message shortly after every participant has seen it;
-// the timed modes stamp an absolute expiry when the message is sent.
+// 'viewed' keeps a message on screen for the reader and deletes it the moment
+// that reader leaves the chat; the timed modes stamp an absolute expiry when
+// the message is sent.
 const DISAPPEAR_MODES = ['off', '1h', '24h', '7d', 'viewed'];
 
 // A direct conversation between two profiles. Chat belongs exclusively to the
@@ -71,8 +72,8 @@ const messageSchema = new mongoose.Schema({
   },
   // Absolute expiry for the timed modes.
   expiresAt: { type: Date },
-  // Set once every participant has read a 'viewed' message; purged after a
-  // short grace window so the reader still sees it on screen.
+  // Set once every participant has read a 'viewed' message; the message is
+  // deleted from the server when that reader leaves the chat.
   viewedAt: { type: Date },
   // Profiles that have seen this message (sender counts as read on send).
   readBy: [{

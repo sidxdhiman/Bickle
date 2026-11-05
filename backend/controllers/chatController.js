@@ -5,7 +5,6 @@ const { findProfileUser } = require('../utils/seedProfiles');
 const { kindOf } = require('../middleware/chatUpload');
 
 const MAX_MESSAGE_LENGTH = 4000;
-const VIEW_GRACE_MS = 45 * 1000;
 
 const DISAPPEAR_TTLS = { '1h': 60 * 60 * 1000, '24h': 24 * 60 * 60 * 1000, '7d': 7 * 24 * 60 * 60 * 1000 };
 const DISAPPEAR_LABELS = {
@@ -38,23 +37,8 @@ const findOwnedConversation = async (req) => {
 const messagePreview = (message) =>
   message.text || (message.attachment && message.attachment.name) || 'Attachment';
 
-// Removes expired messages (timed policies) and fully viewed ones once their
-// grace window passes, then keeps the conversation preview in sync. Lazy —
-// runs on every read path, which is plenty for a two-profile chat.
-const purgeExpired = async (conversation) => {
-  const now = Date.now();
-  const expired = await Message.find({
-    conversation: conversation._id,
-    $or: [
-      { expiresAt: { $lte: new Date(now) } },
-      { disappear: 'viewed', viewedAt: { $ne: null, $lte: new Date(now - VIEW_GRACE_MS) } },
-    ],
-  }).select('_id');
-
-  if (expired.length === 0) return expired.length;
-
-  await Message.deleteMany({ _id: { $in: expired.map((m) => m._id) } });
-
+// Keeps the conversation preview pointing at the newest surviving message.
+const syncLastMessage = async (conversation) => {
   const last = await Message.findOne({ conversation: conversation._id })
     .sort({ createdAt: -1 })
     .select('text sender createdAt attachment');
@@ -62,6 +46,22 @@ const purgeExpired = async (conversation) => {
     ? { text: messagePreview(last), sender: last.sender, at: last.createdAt }
     : { text: '', sender: null, at: null };
   await conversation.save();
+};
+
+// Removes messages whose timed policy has run out, then refreshes the
+// preview. 'viewed' messages are NOT purged here — they are deleted by
+// leaveConversation the moment the reader walks away. Lazy — runs on every
+// read path, which is plenty for a two-profile chat.
+const purgeExpired = async (conversation) => {
+  const expired = await Message.find({
+    conversation: conversation._id,
+    expiresAt: { $lte: new Date(Date.now()) },
+  }).select('_id');
+
+  if (expired.length === 0) return expired.length;
+
+  await Message.deleteMany({ _id: { $in: expired.map((m) => m._id) } });
+  await syncLastMessage(conversation);
   return expired.length;
 };
 
@@ -266,8 +266,9 @@ exports.markRead = async (req, res) => {
       { $addToSet: { readBy: me } }
     );
 
-    // Once every participant has seen a 'viewed' message, start its grace
-    // window; the purge on the next read path deletes it for good.
+    // Once every participant has seen a 'viewed' message it is marked as
+    // viewed: the sender's client animates it away, and the reader's next
+    // leave call deletes it from the server.
     await Message.updateMany(
       {
         conversation: conversation._id,
@@ -278,6 +279,29 @@ exports.markRead = async (req, res) => {
       { viewedAt: new Date() }
     );
 
+    await purgeExpired(conversation);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Called by the client when the reader closes or switches threads: every
+// 'viewed' message they have already seen is deleted for good (their side of
+// the conversation), and any timed expiries are flushed while we are here.
+exports.leaveConversation = async (req, res) => {
+  try {
+    if (denyGuest(req, res)) return;
+    const conversation = await findOwnedConversation(req);
+    if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
+
+    const me = req.dataScope.user;
+    await Message.deleteMany({
+      conversation: conversation._id,
+      disappear: 'viewed',
+      viewedAt: { $ne: null },
+      sender: { $ne: me },
+    });
     await purgeExpired(conversation);
     res.json({ ok: true });
   } catch (error) {

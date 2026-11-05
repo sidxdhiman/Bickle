@@ -9,6 +9,7 @@ const {
   sendMessage,
   markRead,
   updateSettings,
+  leaveConversation,
 } = require('../controllers/chatController');
 
 router.get('/', protect, listConversations);
@@ -19,5 +20,6 @@ router.put('/:id/settings', protect, updateSettings);
 router.post('/:id/messages', protect, upload.single('file'), sendMessage);
 router.get('/:id/messages', protect, getMessages);
 router.post('/:id/read', protect, markRead);
+router.post('/:id/leave', protect, leaveConversation);
 
 module.exports = router;

@@ -209,17 +209,50 @@ const check = (cond, msg, extra) => {
       afterPurge.data.map((m) => m.text)
     );
 
-    // 'viewed': kept through the reader's grace window, then purged.
+    // 'viewed': stays while the reader is in the chat, deleted when they leave.
     const setViewed = await api('PUT', `/chat/${convId}/settings`, { token: meToken, body: { mode: 'viewed' } });
     check(setViewed.status === 200 && setViewed.data.mode === 'viewed', 'me switched the chat to after-viewing', setViewed.data && setViewed.data.mode);
     const vanish = await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'seen once' } });
     check(vanish.data.disappear === 'viewed' && !vanish.data.expiresAt, 'viewed message has no timer before it is read', vanish.data.disappear);
     await api('POST', `/chat/${convId}/read`, { token: dToken, body: {} });
     const stillThere = await api('GET', `/chat/${convId}/messages`, { token: meToken });
-    check(stillThere.data.some((m) => m.text === 'seen once'), 'message stays during the read grace window', stillThere.data.map((m) => m.text));
-    await Message.updateOne({ _id: vanish.data._id }, { viewedAt: new Date(Date.now() - 60000) });
+    check(stillThere.data.some((m) => m.text === 'seen once'), 'viewed message stays while the reader is still in the chat', stillThere.data.map((m) => m.text));
+    const leaveD = await api('POST', `/chat/${convId}/leave`, { token: dToken, body: {} });
+    check(leaveD.status === 200 && leaveD.data.ok, 'the reader can leave the conversation', leaveD.data);
     const goneViewed = await api('GET', `/chat/${convId}/messages`, { token: meToken });
-    check(goneViewed.data.every((m) => m.text !== 'seen once'), 'fully viewed message purged after the grace window', goneViewed.data.map((m) => m.text));
+    check(goneViewed.data.every((m) => m.text !== 'seen once'), 'viewed message deleted once the reader leaves', goneViewed.data.map((m) => m.text));
+
+    // Unread 'viewed' messages survive the reader's leave; own ones are only
+    // deleted once the other side (the reader) leaves.
+    await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'not yet seen' } });
+    await api('POST', `/chat/${convId}/leave`, { token: dToken, body: {} });
+    const afterReaderLeave = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      afterReaderLeave.data.some((m) => m.text === 'not yet seen'),
+      'unread viewed message survives a leave',
+      afterReaderLeave.data.map((m) => m.text)
+    );
+
+    // D reads both, then I leave: my own viewed message must stay put...
+    const mineSent = await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'mine, read by D' } });
+    check(mineSent.status === 201, 'own message sent for the leave checks', mineSent.data && mineSent.data.text);
+    await api('POST', `/chat/${convId}/read`, { token: dToken, body: {} });
+    await api('POST', `/chat/${convId}/leave`, { token: meToken, body: {} });
+    const afterMyLeave = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      afterMyLeave.data.some((m) => m.text === 'mine, read by D'),
+      'own viewed message waits for the other side to leave',
+      afterMyLeave.data.map((m) => m.text)
+    );
+
+    // ...and is deleted the moment D (the reader) leaves.
+    await api('POST', `/chat/${convId}/leave`, { token: dToken, body: {} });
+    const afterGone = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      afterGone.data.every((m) => m.text !== 'mine, read by D'),
+      'own viewed message deleted when the reader leaves',
+      afterGone.data.map((m) => m.text)
+    );
 
     // File attachments round-trip; dangerous types are rejected.
     const fileForm = new FormData();

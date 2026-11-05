@@ -31,13 +31,13 @@ const modePhrase = (key) =>
     viewed: 'after viewing',
   }[key] || '');
 
-// Mirrors the backend purge rules so disappearing messages leave the screen
-// at the same moment they leave the server, even between polls.
-const VIEW_GRACE_MS = 45 * 1000;
+// Mirrors the backend's timed purge so expiring messages leave the screen at
+// the same moment they leave the server, even between polls. 'viewed' messages
+// are handled separately: received ones stay until this reader leaves the
+// thread; own ones animate away the moment the other side reads them.
+const SWOOSH_MS = 650;
 const isVisibleNow = (message) => {
-  const now = Date.now();
-  if (message.expiresAt && new Date(message.expiresAt).getTime() <= now) return false;
-  if (message.viewedAt && new Date(message.viewedAt).getTime() + VIEW_GRACE_MS <= now) return false;
+  if (message.expiresAt && new Date(message.expiresAt).getTime() <= Date.now()) return false;
   return true;
 };
 
@@ -76,14 +76,22 @@ const Chat = () => {
   const [pendingFile, setPendingFile] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [vanishing, setVanishing] = useState(() => new Set());
 
   const activeIdRef = useRef(null);
   const messagesRef = useRef(null);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const knownViewedRef = useRef(new Map());
 
   const active = conversations.find((c) => c._id === activeId) || null;
-  const visibleMessages = messages.filter(isVisibleNow);
+  const visibleMessages = messages.filter((message) => {
+    if (!isVisibleNow(message)) return false;
+    const mine = me ? String(message.sender) === String(me._id) : false;
+    // My own messages are gone for good once read — unless mid-swoosh.
+    if (mine && message.viewedAt && !vanishing.has(message._id)) return false;
+    return true;
+  });
 
   // Attachment URLs are stored server-relative (/uploads/...); the API origin
   // (e.g. /bickle) turns them into paths nginx and the dev proxy both serve.
@@ -128,9 +136,12 @@ const Chat = () => {
   }, []);
 
   // Thread: full load on open, then poll with an `after` cursor for new
-  // messages while this conversation is on screen.
+  // messages while this conversation is on screen. Leaving the thread (switch
+  // or unmount) flushes everything this reader has already seen.
   useEffect(() => {
     setMessages([]);
+    setVanishing(new Set());
+    knownViewedRef.current = new Map();
     setDraft('');
     setPendingFile(null);
     setSettingsOpen(false);
@@ -170,8 +181,41 @@ const Chat = () => {
     return () => {
       cancelled = true;
       clearInterval(timer);
+      // Best-effort: deleting what this reader has seen is the whole point.
+      axios.post(`/chat/${activeId}/leave`, {}).catch(() => {});
     };
   }, [activeId]);
+
+  // Own messages that gain viewedAt while on screen swoosh out, then are
+  // hidden; ones that arrive already viewed never animate (initial load).
+  useEffect(() => {
+    const next = new Map();
+    const newlyViewed = [];
+    for (const message of messages) {
+      const viewed = Boolean(message.viewedAt);
+      const wasViewed = knownViewedRef.current.get(message._id);
+      if (me && String(message.sender) === String(me._id) && viewed && wasViewed === false) {
+        newlyViewed.push(message._id);
+      }
+      next.set(message._id, viewed);
+    }
+    knownViewedRef.current = next;
+    if (newlyViewed.length === 0) return;
+    setVanishing((prev) => {
+      const updated = new Set(prev);
+      newlyViewed.forEach((id) => updated.add(id));
+      return updated;
+    });
+    // Not tied to this effect's cleanup: a late removal is harmless, and the
+    // next poll would otherwise cancel the timer mid-animation.
+    setTimeout(() => {
+      setVanishing((prev) => {
+        const updated = new Set(prev);
+        newlyViewed.forEach((id) => updated.delete(id));
+        return updated;
+      });
+    }, SWOOSH_MS);
+  }, [messages, me]);
 
   const markRead = useCallback(async (conversationId) => {
     try {
@@ -453,6 +497,7 @@ const Chat = () => {
             </header>
 
             <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-4">
+              <style>{`@keyframes chatSwoosh { to { transform: translateX(72px) scale(0.85); opacity: 0; filter: blur(4px); } } .chat-swoosh-out { animation: chatSwoosh ${SWOOSH_MS}ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }`}</style>
               {visibleMessages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center gap-3">
                   <Avatar user={active.peer} size="w-16 h-16" text="text-xl" />
@@ -486,7 +531,7 @@ const Chat = () => {
                             mine
                               ? 'bg-primary text-primary-foreground rounded-2xl rounded-br-md'
                               : 'bg-secondary text-foreground border border-border/60 rounded-2xl rounded-bl-md'
-                          }`}
+                          } ${vanishing.has(message._id) ? 'chat-swoosh-out' : ''}`}
                         >
                           {message.text}
                           {message.attachment && (
