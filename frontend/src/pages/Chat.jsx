@@ -33,8 +33,9 @@ const modePhrase = (key) =>
 
 // Mirrors the backend's timed purge so expiring messages leave the screen at
 // the same moment they leave the server, even between polls. 'viewed' messages
-// are handled separately: received ones stay until this reader leaves the
-// thread; own ones animate away the moment the other side reads them.
+// are handled separately: ones this reader already saw in an earlier session
+// never come back, received ones stay until this reader leaves the thread,
+// and own ones animate away the moment the other side reads them.
 const SWOOSH_MS = 650;
 const isVisibleNow = (message) => {
   if (message.expiresAt && new Date(message.expiresAt).getTime() <= Date.now()) return false;
@@ -83,10 +84,25 @@ const Chat = () => {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const knownViewedRef = useRef(new Map());
+  // 'viewed' messages that opened this thread already seen — they must not
+  // resurface here, only messages that gain viewedAt while we watch stay.
+  const viewedAtLoadRef = useRef(null);
+  // Bumped whenever a message lands locally, so a refresh that was already
+  // in flight cannot wipe it off the screen before the server echoes it back.
+  const localAddRef = useRef(0);
 
   const active = conversations.find((c) => c._id === activeId) || null;
   const visibleMessages = messages.filter((message) => {
     if (!isVisibleNow(message)) return false;
+    // 'viewed' messages that were already read when this thread opened are
+    // gone for good — unless the rule itself changed and brought them back.
+    if (
+      message.viewedAt &&
+      viewedAtLoadRef.current &&
+      viewedAtLoadRef.current.has(message._id)
+    ) {
+      return false;
+    }
     const mine = me ? String(message.sender) === String(me._id) : false;
     // My own messages are gone for good once read — unless mid-swoosh.
     if (mine && message.viewedAt && !vanishing.has(message._id)) return false;
@@ -101,6 +117,28 @@ const Chat = () => {
   useEffect(() => {
     activeIdRef.current = activeId;
   }, [activeId]);
+
+  // Closing or refreshing the tab must still flush the messages this reader
+  // has seen — the unmount cleanup cannot be trusted once the page is going
+  // away, and a keepalive request is the only one that survives the unload.
+  useEffect(() => {
+    const flushOnUnload = () => {
+      const id = activeIdRef.current;
+      if (!id) return;
+      const auth = axios.defaults.headers.common['Authorization'];
+      fetch(`${axios.defaults.baseURL || ''}/chat/${id}/leave`, {
+        method: 'POST',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(auth ? { Authorization: auth } : {}),
+        },
+        body: '{}',
+      }).catch(() => {});
+    };
+    window.addEventListener('pagehide', flushOnUnload);
+    return () => window.removeEventListener('pagehide', flushOnUnload);
+  }, []);
 
   // Conversation list: initial load + light refresh for previews/unread.
   useEffect(() => {
@@ -135,39 +173,50 @@ const Chat = () => {
     };
   }, []);
 
-  // Thread: full load on open, then poll with an `after` cursor for new
-  // messages while this conversation is on screen. Leaving the thread (switch
-  // or unmount) flushes everything this reader has already seen.
+  // Thread: full load on open, then a full refresh while this conversation is
+  // on screen. The server is the source of truth, so messages deleted by the
+  // disappearing policy (or re-stamped when the rule changes) drop off the
+  // screen the next time the thread refreshes. Leaving the thread (switch or
+  // unmount) flushes everything this reader has already seen.
   useEffect(() => {
     setMessages([]);
     setVanishing(new Set());
     knownViewedRef.current = new Map();
+    viewedAtLoadRef.current = null;
     setDraft('');
     setPendingFile(null);
     setSettingsOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (!activeId) return undefined;
     let cancelled = false;
-    let cursor = null;
 
     const load = async () => {
+      const version = localAddRef.current;
       try {
-        const query = cursor ? `?after=${encodeURIComponent(cursor)}` : '';
-        const res = await axios.get(`/chat/${activeId}/messages${query}`);
+        const res = await axios.get(`/chat/${activeId}/messages`);
         if (cancelled) return;
-        setMessages((prev) => {
-          const merged = [...prev];
-          for (const message of res.data) {
-            const index = merged.findIndex((existing) => existing._id === message._id);
-            if (index === -1) merged.push(message);
-            else merged[index] = message;
-          }
-          merged.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-          return merged;
-        });
-        if (res.data.length > 0) {
-          cursor = res.data[res.data.length - 1].createdAt;
+        // Remember which messages opened this thread already viewed: those
+        // never show again, while ones that gain viewedAt while we watch
+        // stay on screen until this reader leaves.
+        if (!viewedAtLoadRef.current) {
+          viewedAtLoadRef.current = new Set(
+            res.data.filter((message) => message.viewedAt).map((message) => message._id)
+          );
         }
+        setMessages((prev) => {
+          // A message that landed while this refresh was in flight is missing
+          // from the response — merge it back rather than drop it. The next
+          // version-stable refresh reconciles deletions as usual.
+          if (localAddRef.current !== version) {
+            const ids = new Set(res.data.map((message) => message._id));
+            const kept = prev.filter((message) => !ids.has(message._id));
+            if (kept.length === 0) return res.data;
+            return [...res.data, ...kept].sort(
+              (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+            );
+          }
+          return res.data;
+        });
         setError('');
       } catch (err) {
         if (!cancelled) setError(err.response?.data?.message || 'Could not load messages.');
@@ -267,6 +316,7 @@ const Chat = () => {
         res = await axios.post(`/chat/${activeId}/messages`, { text });
       }
       const sentMessage = res.data;
+      localAddRef.current += 1;
       setMessages((prev) =>
         prev.some((m) => m._id === sentMessage._id) ? prev : [...prev, sentMessage]
       );
@@ -299,9 +349,17 @@ const Chat = () => {
       const res = await axios.put(`/chat/${activeId}/settings`, { mode });
       setSettingsOpen(false);
       const systemMessage = res.data.message;
-      setMessages((prev) =>
-        prev.some((m) => m._id === systemMessage._id) ? prev : [...prev, systemMessage]
-      );
+      // The new rule reaches back through the whole history, so reload the
+      // thread: messages it already covers must leave the screen right now.
+      try {
+        const fresh = await axios.get(`/chat/${activeId}/messages`);
+        setMessages(fresh.data);
+      } catch {
+        setMessages((prev) =>
+          prev.some((m) => m._id === systemMessage._id) ? prev : [...prev, systemMessage]
+        );
+      }
+      localAddRef.current += 1;
       setConversations((prev) =>
         prev.map((c) =>
           c._id === activeId
@@ -488,7 +546,7 @@ const Chat = () => {
                         </button>
                       ))}
                       <p className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border/60 mt-1">
-                        Either of you can change this. New messages follow the new rule; a notice is posted to the chat.
+                        Either of you can change this. Every message in the chat follows the new rule; a notice is posted to the chat.
                       </p>
                     </div>
                   </>

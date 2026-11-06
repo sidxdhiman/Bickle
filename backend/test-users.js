@@ -212,6 +212,38 @@ const check = (cond, msg, extra) => {
     // 'viewed': stays while the reader is in the chat, deleted when they leave.
     const setViewed = await api('PUT', `/chat/${convId}/settings`, { token: meToken, body: { mode: 'viewed' } });
     check(setViewed.status === 200 && setViewed.data.mode === 'viewed', 'me switched the chat to after-viewing', setViewed.data && setViewed.data.mode);
+
+    // The rule reaches back through the whole history — not just the messages
+    // sent after the switch. 'Hi D' was sent under 'off' and both of us had
+    // read it, so it is gone the moment after-viewing lands; 'Hey!' was never
+    // read by me, so it survives under the new rule instead.
+    const historyAfterViewed = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      historyAfterViewed.data.every((m) => m.text !== 'Hi D'),
+      'old message everyone already read is deleted when after-viewing lands',
+      historyAfterViewed.data.map((m) => m.text)
+    );
+    const oldReply = historyAfterViewed.data.find((m) => m.text === 'Hey!');
+    check(
+      Boolean(oldReply) && oldReply.disappear === 'viewed' && !oldReply.expiresAt,
+      'old message not yet read by both follows the after-viewing rule',
+      oldReply
+    );
+
+    // Switching the rule again re-stamps the history the same way, so nothing
+    // stays stuck on a policy the conversation no longer uses.
+    const backOff = await api('PUT', `/chat/${convId}/settings`, { token: meToken, body: { mode: 'off' } });
+    check(backOff.status === 200 && backOff.data.mode === 'off', 'me switched the chat back to off', backOff.data && backOff.data.mode);
+    const historyAfterOff = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    const replyAfterOff = historyAfterOff.data.find((m) => m.text === 'Hey!');
+    check(
+      Boolean(replyAfterOff) && replyAfterOff.disappear === 'off' && !replyAfterOff.expiresAt && !replyAfterOff.viewedAt,
+      'history follows the off rule again after the switch',
+      replyAfterOff
+    );
+    const viewedAgain = await api('PUT', `/chat/${convId}/settings`, { token: meToken, body: { mode: 'viewed' } });
+    check(viewedAgain.status === 200 && viewedAgain.data.mode === 'viewed', 'me switched back to after-viewing', viewedAgain.data && viewedAgain.data.mode);
+
     const vanish = await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'seen once' } });
     check(vanish.data.disappear === 'viewed' && !vanish.data.expiresAt, 'viewed message has no timer before it is read', vanish.data.disappear);
     await api('POST', `/chat/${convId}/read`, { token: dToken, body: {} });

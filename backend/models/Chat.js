@@ -21,7 +21,9 @@ const conversationSchema = new mongoose.Schema({
     at: { type: Date },
   },
   // Which profiles currently share this conversation; either participant may
-  // change it. New messages snapshot it as their own disappear policy.
+  // change it. New messages snapshot it as their own disappear policy, and a
+  // change re-stamps everything already in the chat — the rule always
+  // governs the whole history, not just the messages sent after it.
   disappearMode: {
     type: String,
     enum: DISAPPEAR_MODES,

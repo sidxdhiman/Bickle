@@ -50,8 +50,9 @@ const syncLastMessage = async (conversation) => {
 
 // Removes messages whose timed policy has run out, then refreshes the
 // preview. 'viewed' messages are NOT purged here — they are deleted by
-// leaveConversation the moment the reader walks away. Lazy — runs on every
-// read path, which is plenty for a two-profile chat.
+// leaveConversation the moment the reader walks away (and by updateSettings
+// the moment the rule lands on messages everyone already read). Lazy — runs
+// on every read path, which is plenty for a two-profile chat.
 const purgeExpired = async (conversation) => {
   const expired = await Message.find({
     conversation: conversation._id,
@@ -296,12 +297,14 @@ exports.leaveConversation = async (req, res) => {
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
     const me = req.dataScope.user;
-    await Message.deleteMany({
+    const gone = await Message.deleteMany({
       conversation: conversation._id,
       disappear: 'viewed',
       viewedAt: { $ne: null },
       sender: { $ne: me },
     });
+    // The preview must not keep quoting a message that just left.
+    if (gone.deletedCount > 0) await syncLastMessage(conversation);
     await purgeExpired(conversation);
     res.json({ ok: true });
   } catch (error) {
@@ -310,7 +313,10 @@ exports.leaveConversation = async (req, res) => {
 };
 
 // Either profile may change the disappearing-message policy at any time; the
-// change lands as a system message both sides can see.
+// change lands as a system message both sides can see. The new rule is not
+// just for messages sent from now on — it reaches back through everything
+// already in the conversation, so 'after viewing' governs every message that
+// has ever been sent in the chat.
 exports.updateSettings = async (req, res) => {
   try {
     if (denyGuest(req, res)) return;
@@ -324,6 +330,32 @@ exports.updateSettings = async (req, res) => {
 
     conversation.disappearMode = mode;
     await conversation.save();
+
+    if (mode === 'viewed') {
+      // Everyone has already seen these — under 'after viewing' they are
+      // gone the moment the rule lands, not the next time somebody leaves.
+      // (The conversation preview is rewritten by the notice posted below.)
+      await Message.deleteMany({
+        conversation: conversation._id,
+        readBy: { $all: conversation.participants },
+      });
+      // The survivors have not been seen by everyone yet: they follow the
+      // viewed rule from now on and disappear the moment their reader does.
+      await Message.updateMany(
+        { conversation: conversation._id },
+        { $set: { disappear: 'viewed', expiresAt: null, viewedAt: null } }
+      );
+    } else {
+      // Timed rules and 'off' re-stamp the whole history too, so switching
+      // away from 'viewed' also brings back anything that was waiting to be
+      // deleted after viewing.
+      const expiresAt =
+        mode === 'off' ? null : new Date(Date.now() + DISAPPEAR_TTLS[mode]);
+      await Message.updateMany(
+        { conversation: conversation._id },
+        { $set: { disappear: mode, expiresAt, viewedAt: null } }
+      );
+    }
 
     const me = req.dataScope.user;
     const user = await User.findById(me).select('username');
