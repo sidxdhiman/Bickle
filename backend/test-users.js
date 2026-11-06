@@ -330,9 +330,9 @@ const check = (cond, msg, extra) => {
     check(strangerSettings.status === 404, 'stranger cannot change chat settings', strangerSettings.data);
 
     // --- Either profile can wipe the whole conversation and start fresh ---
-    const strangerWipe = await api('DELETE', `/chat/${convId}/messages`, { token: stranger.data.token });
+    const strangerWipe = await api('POST', `/chat/${convId}/clear`, { token: stranger.data.token, body: {} });
     check(strangerWipe.status === 404, 'non-participant cannot clear the conversation', strangerWipe.data);
-    const wipe = await api('DELETE', `/chat/${convId}/messages`, { token: dToken });
+    const wipe = await api('POST', `/chat/${convId}/clear`, { token: dToken, body: {} });
     check(
       wipe.status === 200 && wipe.data.ok && wipe.data.deleted > 0,
       'the conversation can be cleared entirely',
@@ -349,6 +349,21 @@ const check = (cond, msg, extra) => {
       previewAfterWipe.status === 200 && !previewAfterWipe.data[0].lastMessage,
       'conversation preview resets after clearing',
       previewAfterWipe.data[0] && previewAfterWipe.data[0].lastMessage
+    );
+
+    // The REST-shaped DELETE route clears the same way.
+    await api('POST', `/chat/${convId}/messages`, { token: meToken, body: { text: 'leftover' } });
+    const wipeDelete = await api('DELETE', `/chat/${convId}/messages`, { token: dToken });
+    check(
+      wipeDelete.status === 200 && wipeDelete.data.deleted > 0,
+      'DELETE clears the conversation too',
+      wipeDelete.data
+    );
+    const afterDeleteWipe = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      afterDeleteWipe.status === 200 && afterDeleteWipe.data.length === 0,
+      'nothing survives the DELETE wipe',
+      afterDeleteWipe.data.map((m) => m.text)
     );
 
     // --- D deletes her data: mine must be untouched ---

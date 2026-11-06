@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { Check, Download, FileText, Loader2, MessageCircle, Paperclip, SendHorizontal, Timer, Trash2, X } from 'lucide-react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -77,6 +78,8 @@ const Chat = () => {
   const [pendingFile, setPendingFile] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updatingSettings, setUpdatingSettings] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [vanishing, setVanishing] = useState(() => new Set());
 
   const activeIdRef = useRef(null);
@@ -140,6 +143,17 @@ const Chat = () => {
     return () => window.removeEventListener('pagehide', flushOnUnload);
   }, []);
 
+  // The delete-chat dialog behaves like the app's other modals: Escape and
+  // the backdrop dismiss it without touching anything.
+  useEffect(() => {
+    if (!clearOpen) return undefined;
+    const onKey = (event) => {
+      if (event.key === 'Escape') setClearOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [clearOpen]);
+
   // Conversation list: initial load + light refresh for previews/unread.
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +200,7 @@ const Chat = () => {
     setDraft('');
     setPendingFile(null);
     setSettingsOpen(false);
+    setClearOpen(false);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     if (!activeId) return undefined;
     let cancelled = false;
@@ -382,11 +397,11 @@ const Chat = () => {
 
   // Wipes the whole thread on the server so both sides start over. Local
   // state goes with it; the sidebar preview is reset by the same request.
-  const clearChat = async () => {
-    if (!activeId) return;
-    if (!window.confirm('Delete every message in this chat? This cannot be undone.')) return;
+  const confirmClearChat = async () => {
+    if (!activeId || clearing) return;
+    setClearing(true);
     try {
-      await axios.delete(`/chat/${activeId}/messages`);
+      await axios.post(`/chat/${activeId}/clear`, {});
       setMessages([]);
       setVanishing(new Set());
       knownViewedRef.current = new Map();
@@ -394,10 +409,19 @@ const Chat = () => {
       setConversations((prev) =>
         prev.map((c) => (c._id === activeId ? { ...c, lastMessage: null } : c))
       );
+      setClearOpen(false);
       setError('');
     } catch (err) {
+      setClearOpen(false);
       setError(err.response?.data?.message || 'Could not delete the chat.');
+    } finally {
+      setClearing(false);
     }
+  };
+
+  const openClear = () => {
+    setSettingsOpen(false);
+    setClearOpen(true);
   };
 
   const selectConversation = (id) => setActiveId(id);
@@ -570,7 +594,7 @@ const Chat = () => {
                       </p>
                       <button
                         type="button"
-                        onClick={clearChat}
+                        onClick={openClear}
                         disabled={updatingSettings}
                         className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-destructive transition hover:bg-destructive/10 disabled:opacity-50 border-t border-border/60"
                       >
@@ -723,6 +747,58 @@ const Chat = () => {
           </div>
         )}
       </section>
+
+      {clearOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setClearOpen(false)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl border border-border bg-background shadow-2xl overflow-hidden"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="clear-chat-title"
+            >
+              <div className="p-5 text-center space-y-3">
+                <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-destructive" />
+                </div>
+                <h2 id="clear-chat-title" className="text-lg font-bold leading-tight">
+                  Delete entire chat?
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Every message between you and {active?.peer?.username || 'this contact'} will be
+                  removed for both of you. This cannot be undone.
+                </p>
+              </div>
+              <div className="flex gap-2 px-5 pb-5">
+                <button
+                  type="button"
+                  onClick={() => setClearOpen(false)}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-secondary/60 text-sm font-medium transition hover:bg-accent"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmClearChat}
+                  disabled={clearing}
+                  className="flex-1 px-4 py-2.5 rounded-lg bg-destructive text-destructive-foreground text-sm font-medium transition hover:bg-destructive/90 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {clearing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   );
 };
