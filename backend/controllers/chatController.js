@@ -312,6 +312,24 @@ exports.leaveConversation = async (req, res) => {
   }
 };
 
+// Wipes every message in the conversation so both profiles can start over.
+// Either participant may do it; the sidebar preview resets with the messages.
+exports.clearMessages = async (req, res) => {
+  try {
+    if (denyGuest(req, res)) return;
+    const conversation = await findOwnedConversation(req);
+    if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
+
+    const gone = await Message.deleteMany({ conversation: conversation._id });
+    conversation.lastMessage = { text: '', sender: null, at: null };
+    await conversation.save();
+
+    res.json({ ok: true, deleted: gone.deletedCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Either profile may change the disappearing-message policy at any time; the
 // change lands as a system message both sides can see. The new rule is not
 // just for messages sent from now on — it reaches back through everything

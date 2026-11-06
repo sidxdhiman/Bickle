@@ -329,6 +329,28 @@ const check = (cond, msg, extra) => {
     const strangerSettings = await api('PUT', `/chat/${convId}/settings`, { token: stranger.data.token, body: { mode: 'off' } });
     check(strangerSettings.status === 404, 'stranger cannot change chat settings', strangerSettings.data);
 
+    // --- Either profile can wipe the whole conversation and start fresh ---
+    const strangerWipe = await api('DELETE', `/chat/${convId}/messages`, { token: stranger.data.token });
+    check(strangerWipe.status === 404, 'non-participant cannot clear the conversation', strangerWipe.data);
+    const wipe = await api('DELETE', `/chat/${convId}/messages`, { token: dToken });
+    check(
+      wipe.status === 200 && wipe.data.ok && wipe.data.deleted > 0,
+      'the conversation can be cleared entirely',
+      wipe.data
+    );
+    const afterWipe = await api('GET', `/chat/${convId}/messages`, { token: meToken });
+    check(
+      afterWipe.status === 200 && afterWipe.data.length === 0,
+      'clearing deletes every message for both sides',
+      afterWipe.data.map((m) => m.text)
+    );
+    const previewAfterWipe = await api('GET', '/chat', { token: meToken });
+    check(
+      previewAfterWipe.status === 200 && !previewAfterWipe.data[0].lastMessage,
+      'conversation preview resets after clearing',
+      previewAfterWipe.data[0] && previewAfterWipe.data[0].lastMessage
+    );
+
     // --- D deletes her data: mine must be untouched ---
     const del = await api('DELETE', '/settings/delete-all-data', { token: dToken });
     check(del.status === 200, 'D deleted all of her data', del.data);

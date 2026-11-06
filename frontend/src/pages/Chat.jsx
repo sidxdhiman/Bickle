@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Check, Download, FileText, Loader2, MessageCircle, Paperclip, SendHorizontal, Timer, X } from 'lucide-react';
+import { Check, Download, FileText, Loader2, MessageCircle, Paperclip, SendHorizontal, Timer, Trash2, X } from 'lucide-react';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 
 const GRADIENTS = [
@@ -380,6 +380,26 @@ const Chat = () => {
     }
   };
 
+  // Wipes the whole thread on the server so both sides start over. Local
+  // state goes with it; the sidebar preview is reset by the same request.
+  const clearChat = async () => {
+    if (!activeId) return;
+    if (!window.confirm('Delete every message in this chat? This cannot be undone.')) return;
+    try {
+      await axios.delete(`/chat/${activeId}/messages`);
+      setMessages([]);
+      setVanishing(new Set());
+      knownViewedRef.current = new Map();
+      viewedAtLoadRef.current = null;
+      setConversations((prev) =>
+        prev.map((c) => (c._id === activeId ? { ...c, lastMessage: null } : c))
+      );
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not delete the chat.');
+    }
+  };
+
   const selectConversation = (id) => setActiveId(id);
 
   const renderAttachment = (message) => {
@@ -548,6 +568,15 @@ const Chat = () => {
                       <p className="px-3 py-2 text-[10px] text-muted-foreground border-t border-border/60 mt-1">
                         Either of you can change this. Every message in the chat follows the new rule; a notice is posted to the chat.
                       </p>
+                      <button
+                        type="button"
+                        onClick={clearChat}
+                        disabled={updatingSettings}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left text-destructive transition hover:bg-destructive/10 disabled:opacity-50 border-t border-border/60"
+                      >
+                        <Trash2 className="w-4 h-4 shrink-0" />
+                        Delete entire chat
+                      </button>
                     </div>
                   </>
                 )}
