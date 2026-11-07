@@ -413,7 +413,15 @@ const Chat = () => {
       setError('');
     } catch (err) {
       setClearOpen(false);
-      setError(err.response?.data?.message || 'Could not delete the chat.');
+      // A proxy or an out-of-date backend answers with plain HTML, which has
+      // no .message — surface the status so the failure is never a mystery.
+      const status = err.response?.status;
+      setError(
+        err.response?.data?.message ||
+          (status
+            ? `Could not delete the chat. (HTTP ${status})`
+            : 'Could not delete the chat — no reply from the server.')
+      );
     } finally {
       setClearing(false);
     }
