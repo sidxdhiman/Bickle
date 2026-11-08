@@ -18,6 +18,7 @@ import {
   Image as ImageIcon,
   Upload,
   SlidersHorizontal,
+  Users,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -221,6 +222,57 @@ const Settings = () => {
   const [navMode, setNavMode] = useNavMode();
   const [bg, updateBg] = useBackground();
   const [isUploadingBg, setIsUploadingBg] = useState(false);
+  const [profileList, setProfileList] = useState([]);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createdInfo, setCreatedInfo] = useState(null);
+
+  useEffect(() => {
+    axios
+      .get('/auth/profiles')
+      .then((res) => {
+        if (Array.isArray(res.data)) setProfileList(res.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleCreateProfile = async (event) => {
+    event.preventDefault();
+    setCreateError('');
+    setCreatedInfo(null);
+    if (newPassword !== confirmPw) {
+      setCreateError('Passwords do not match.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const res = await axios.post('/auth/create-profile', {
+        username: newUsername.trim(),
+        password: newPassword,
+      });
+      setCreatedInfo({ username: res.data.username, password: newPassword });
+      setNewUsername('');
+      setNewPassword('');
+      setConfirmPw('');
+      const list = await axios.get('/auth/profiles');
+      if (Array.isArray(list.data)) setProfileList(list.data);
+    } catch (err) {
+      // A stale backend answers with plain HTML (no .message) — show the
+      // status so the failure is never a mystery.
+      const status = err.response?.status;
+      setCreateError(
+        err.response?.data?.message ||
+          (status
+            ? `Could not create the profile. (HTTP ${status})`
+            : 'Could not create the profile — no reply from the server.')
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
 
   useEffect(() => {
     // Load settings from localStorage
@@ -968,6 +1020,87 @@ const Settings = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Profiles */}
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <Users className="w-6 h-6 text-primary" />
+          <h2 className="text-xl font-semibold">Profiles</h2>
+        </div>
+
+        <p className="text-sm text-muted-foreground mb-4">
+          Create a sign-in for someone else. Every profile gets the whole app with its own
+          private space — tasks, notes, chat, everything — and nothing is shared unless you
+          share it.
+        </p>
+
+        <div className="flex flex-wrap gap-2 mb-5">
+          {profileList.map((profile) => (
+            <span
+              key={profile.key}
+              className="px-3 py-1 rounded-full border border-border bg-secondary text-sm font-medium"
+            >
+              {profile.username}
+            </span>
+          ))}
+        </div>
+
+        <form onSubmit={handleCreateProfile} className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={newUsername}
+            onChange={(event) => setNewUsername(event.target.value)}
+            placeholder="Username"
+            maxLength={32}
+            className="flex-1 rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm outline-none transition focus:border-primary"
+          />
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            placeholder="Password (6+ characters)"
+            autoComplete="new-password"
+            className="flex-1 rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm outline-none transition focus:border-primary"
+          />
+          <input
+            type="password"
+            value={confirmPw}
+            onChange={(event) => setConfirmPw(event.target.value)}
+            placeholder="Repeat password"
+            autoComplete="new-password"
+            className="flex-1 rounded-lg border border-input bg-transparent px-3 py-2.5 text-sm outline-none transition focus:border-primary"
+          />
+          <button
+            type="submit"
+            disabled={creating || !newUsername.trim() || !newPassword || !confirmPw}
+            className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creating ? 'Creating...' : 'Create profile'}
+          </button>
+        </form>
+
+        {createError && (
+          <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {createError}
+          </div>
+        )}
+
+        {createdInfo && (
+          <div className="mt-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm space-y-1">
+            <p className="font-semibold text-green-700 dark:text-green-400">
+              Profile &ldquo;{createdInfo.username}&rdquo; created
+            </p>
+            <p className="text-foreground">
+              Username: <code className="font-mono font-semibold">{createdInfo.username}</code>
+              {' · '}
+              Password: <code className="font-mono font-semibold">{createdInfo.password}</code>
+            </p>
+            <p className="text-muted-foreground">
+              They now appear on the login screen — share these credentials with them.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Danger Zone */}

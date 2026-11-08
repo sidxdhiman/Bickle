@@ -376,7 +376,56 @@ const check = (cond, msg, extra) => {
     const meHabitsAfter = await api('GET', '/habits', { token: meToken });
     check(meHabitsAfter.data.length === 0, 'baseline: I never had habits', meHabitsAfter.data);
     const dArtAfter = await api('GET', '/art/blogs', { token: dToken });
-    check(dArtAfter.data.length === 1, 'settings delete-all only wipes listed modules (art stays for D)', dArtAfter.data && dArtAfter.data.length);
+    check(dArtAfter.status === 200 && dArtAfter.data.length === 1, 'settings delete-all only wipes listed modules (art stays for D)', dArtAfter.data && dArtAfter.data.length);
+
+    // --- Created profiles: mint extra sign-ins with full access ---
+    const beforeList = await api('GET', '/auth/profiles');
+    const riley = await api('POST', '/auth/create-profile', {
+      token: meToken,
+      body: { username: 'Riley', password: 'riley-pass-1' },
+    });
+    check(riley.status === 201 && riley.data.username === 'Riley' && !('password' in riley.data), 'signed-in profile can create a new sign-in', riley.data);
+
+    const dupName = await api('POST', '/auth/create-profile', {
+      token: meToken,
+      body: { username: 'riley', password: 'riley-pass-1' },
+    });
+    check(dupName.status === 400, 'usernames are unique (case-insensitive)', dupName.data);
+
+    const reservedName = await api('POST', '/auth/create-profile', {
+      token: meToken,
+      body: { username: 'me', password: 'riley-pass-1' },
+    });
+    check(reservedName.status === 400, 'seeded profile keys stay reserved', reservedName.data);
+
+    const weakPw = await api('POST', '/auth/create-profile', {
+      token: dToken,
+      body: { username: 'Sam', password: '123' },
+    });
+    check(weakPw.status === 400, 'short passwords are rejected', weakPw.data);
+
+    const afterList = await api('GET', '/auth/profiles');
+    check(afterList.status === 200 && afterList.data.length === beforeList.data.length + 1, 'the picker lists the new profile', afterList.data);
+    check(afterList.data.some((p) => p.key === 'Riley' && p.username === 'Riley'), 'created profile signs in with its username as key', afterList.data);
+    check(afterList.data.every((p) => !('email' in p)), 'created profiles never expose emails either', afterList.data);
+
+    const rileyWrong = await api('POST', '/auth/login', { body: { profile: 'Riley', password: 'nope' } });
+    check(rileyWrong.status === 401, 'created profile rejects a wrong password', rileyWrong.data);
+
+    const rileyLogin = await api('POST', '/auth/login', { body: { profile: 'Riley', password: 'riley-pass-1' } });
+    check(rileyLogin.status === 200 && rileyLogin.data.token && rileyLogin.data.username === 'Riley', 'created profile signs in from the picker', rileyLogin.data);
+
+    // Full access of their own: a note nobody else can see.
+    const rileyNote = await api('POST', '/notes', { token: rileyLogin.data.token, body: { title: 'Riley Private Note', content: 'mine' } });
+    check(rileyNote.status === 201, 'created profile has full access to the app', rileyNote.data);
+    const meSeesRiley = await api('GET', '/notes', { token: meToken });
+    check(meSeesRiley.status === 200 && !meSeesRiley.data.some((n) => n.title === 'Riley Private Note'), "created profile's data stays private", meSeesRiley.data && meSeesRiley.data.map((n) => n.title));
+
+    // Guests never mint accounts.
+    const gs2 = await api('POST', '/guest', { token: meToken, body: { label: 'Nosy', durationMinutes: 5, allowedPages: ['notes'] } });
+    const guestCreate = await api('POST', '/auth/create-profile', { token: gs2.data.token, body: { username: 'Hacker', password: 'password1' } });
+    check(gs2.status === 201 && guestCreate.status === 403, 'guests cannot create profiles', guestCreate.data);
+    await api('DELETE', `/guest/${gs2.data._id}`, { token: meToken });
   } catch (error) {
     failures += 1;
     console.error('ERROR:', error);
