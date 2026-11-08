@@ -23,9 +23,15 @@ const defaultStatusOptions = [
   { id: 'completed', label: 'Completed', color: '#10b981' },
 ];
 
-const getStatusLabel = (statusId, statuses = defaultStatusOptions) => {
-  const status = statuses.find(item => item.id === statusId);
-  return status ? status.label : '-';
+// Resolves a task's status against its own list first (custom statuses),
+// falling back to the defaults — always with a label and colour to show.
+const getStatusMeta = (task, lists) => {
+  const listStatuses = lists.find(list => list._id === task.list)?.statuses;
+  return (
+    listStatuses?.find(item => item.id === task.status) ||
+    defaultStatusOptions.find(item => item.id === task.status) ||
+    { id: task.status, label: task.status, color: '#64748b' }
+  );
 };
 
 const getStatusOptionsForTask = (task, lists) => {
@@ -271,7 +277,7 @@ const TaskModal = ({ isOpen, onClose, onSubmit, lists, onCreateList, task = null
   );
 };
 
-const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onEdit }) => {
+const TaskDetailModal = ({ isOpen, onClose, task, lists, onStatusChange, onDelete, onEdit }) => {
   if (!isOpen || !task) return null;
 
   const getListName = (id) => lists.find(l => l._id === id)?.name || 'Unknown';
@@ -282,24 +288,15 @@ const TaskDetailModal = ({ isOpen, onClose, task, lists, onUpdate, onDelete, onE
     ? [{ id: 'unassigned', label: '-' }, ...baseTaskStatusOptions]
     : baseTaskStatusOptions;
 
-  const handleStatusChange = async (newStatus) => {
+  // Status mutations live in the page so the board and this modal both move
+  // instantly (optimistically) without a refetch.
+  const handleStatusChange = (newStatus) => {
     if (newStatus === 'unassigned') return;
-    try {
-      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
-      onUpdate(res.data);
-    } catch (error) {
-      console.error('Error updating task status:', error);
-    }
+    onStatusChange(task, newStatus);
   };
 
-  const handleStatusToggle = async () => {
-    const newStatus = task.status === 'completed' ? 'todo' : 'completed';
-    try {
-      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
-      onUpdate(res.data);
-    } catch (error) {
-      console.error('Error updating task status:', error);
-    }
+  const handleStatusToggle = () => {
+    onStatusChange(task, task.status === 'completed' ? 'todo' : 'completed');
   };
 
   const handleEdit = () => {
@@ -866,11 +863,18 @@ const TaskPage = () => {
     }
   };
 
+  // Single funnel for every task mutation: the board, the open detail modal
+  // and the search index all update together — no refresh needed anywhere.
+  const applyTaskUpdate = (updatedTask) => {
+    setTasks(prev => prev.map(task => task._id === updatedTask._id ? updatedTask : task));
+    setSelectedTask(prev => (prev && prev._id === updatedTask._id ? updatedTask : prev));
+    upsertSearchDoc('task', updatedTask).catch(() => {});
+  };
+
   const handleUpdateTask = async (taskData) => {
     try {
       const res = await axios.put(`/tasks/${editingTask._id}`, taskData);
-      setTasks(prev => prev.map(task => task._id === editingTask._id ? res.data : task));
-      upsertSearchDoc('task', res.data).catch(() => {});
+      applyTaskUpdate(res.data);
       setIsModalOpen(false);
       setEditingTask(null);
     } catch (error) {
@@ -883,39 +887,29 @@ const TaskPage = () => {
     setIsDetailModalOpen(true);
   };
 
-  const handleTaskUpdate = (updatedTask) => {
-    setTasks(prev => prev.map(task => task._id === updatedTask._id ? updatedTask : task));
-    setSelectedTask(updatedTask);
-    upsertSearchDoc('task', updatedTask).catch(() => {});
-  };
-
   const handleTaskDelete = (taskId) => {
     setTasks(prev => prev.filter(task => task._id !== taskId));
+    setSelectedTask(prev => (prev && prev._id === taskId ? null : prev));
     removeSearchDoc('task', taskId).catch(() => {});
   };
 
-  const handleToggleComplete = async (task) => {
-    const newStatus = task.status === 'completed' ? 'todo' : 'completed';
+  // Optimistic status flips: the UI moves the instant you click and rolls
+  // back only if the server rejects the change.
+  const handleStatusChange = async (task, newStatus) => {
+    if (!canEdit('tasks') || newStatus === 'unassigned' || newStatus === task.status) return;
+    const previous = task.status;
+    applyTaskUpdate({ ...task, status: newStatus });
     try {
-      await axios.put(`/tasks/${task._id}`, { status: newStatus });
-      setTasks(prev => prev.map(t => t._id === task._id ? { ...t, status: newStatus } : t));
+      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
+      applyTaskUpdate(res.data);
     } catch (error) {
+      applyTaskUpdate({ ...task, status: previous });
       console.error('Error updating task status:', error);
     }
   };
 
-  const handleStatusChange = async (task, newStatus) => {
-    if (newStatus === 'unassigned') return;
-    try {
-      const res = await axios.put(`/tasks/${task._id}`, { status: newStatus });
-      setTasks(prev => prev.map(t => t._id === task._id ? res.data : t));
-      if (selectedTask?._id === task._id) {
-        setSelectedTask(res.data);
-      }
-    } catch (error) {
-      console.error('Error updating task status:', error);
-    }
-  };
+  const handleToggleComplete = (task) =>
+    handleStatusChange(task, task.status === 'completed' ? 'todo' : 'completed');
 
   const getListName = (id) => lists.find(l => l._id === id)?.name || 'Unknown';
   const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString() : 'No date';
@@ -944,13 +938,9 @@ const TaskPage = () => {
 
   const handleDrop = async (statusId) => {
     if (!draggedTask) return;
-    try {
-      await axios.put(`/tasks/${draggedTask._id}`, { status: statusId });
-      setTasks(prev => prev.map(t => t._id === draggedTask._id ? { ...t, status: statusId } : t));
-      setDraggedTask(null);
-    } catch (error) {
-      console.error('Error updating task status:', error);
-    }
+    const task = draggedTask;
+    setDraggedTask(null);
+    await handleStatusChange(task, statusId);
   };
 
   // List management handlers
@@ -1213,24 +1203,37 @@ const TaskPage = () => {
                       setIsDetailModalOpen(true);
                     }}
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // handleUpdateTask({ ...task, status: task.status === 'completed' ? 'todo' : 'completed' });
-                        }}
-                        className={cn(
-                          "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                          task.status === 'completed' ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground hover:bg-accent"
-                        )}
-                      >
-                        {task.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+                      <div className="flex items-center gap-3">
+                        <div
+                          role="checkbox"
+                          aria-checked={task.status === 'completed'}
+                          aria-label={task.status === 'completed' ? 'Mark as not complete' : 'Mark complete'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleComplete(task);
+                          }}
+                          className={cn(
+                            "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer",
+                            task.status === 'completed'
+                              ? "bg-green-500 border-green-500 text-white scale-100"
+                              : "border-muted-foreground hover:bg-accent hover:scale-110"
+                          )}
+                        >
+                          {task.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
+                        </div>
+                        <div>
+                          <p className={cn("font-medium", task.status === 'completed' && "line-through text-muted-foreground")}>{task.title}</p>
+                          <span
+                            className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full"
+                            style={{
+                              backgroundColor: `${getStatusMeta(task, lists).color}1f`,
+                              color: getStatusMeta(task, lists).color,
+                            }}
+                          >
+                            {getStatusMeta(task, lists).label}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <p className={cn("font-medium", task.status === 'completed' && "line-through text-muted-foreground")}>{task.title}</p>
-                        <p className="text-sm text-muted-foreground">{getStatusLabel(task.status)}</p>
-                      </div>
-                    </div>
                     <div className="flex items-center gap-4">
                       {isTaskOverdue(task) && (
                         <span className="text-xs text-red-500 flex items-center gap-1">
@@ -1285,11 +1288,14 @@ const TaskPage = () => {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // handleUpdateTask({ ...task, status: task.status === 'completed' ? 'todo' : 'completed' });
+                                handleToggleComplete(task);
                               }}
+                              aria-label={task.status === 'completed' ? 'Mark as not complete' : 'Mark complete'}
                               className={cn(
-                                "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
-                                task.status === 'completed' ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground hover:bg-accent"
+                                "w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+                                task.status === 'completed'
+                                  ? "bg-green-500 border-green-500 text-white"
+                                  : "border-muted-foreground hover:bg-accent hover:scale-110"
                               )}
                             >
                               {task.status === 'completed' && <CheckCircle2 className="w-3 h-3" />}
@@ -1347,12 +1353,9 @@ const TaskPage = () => {
         onClose={() => setIsDetailModalOpen(false)}
         task={selectedTask}
         lists={lists}
-        onUpdate={handleUpdateTask}
+        onStatusChange={handleStatusChange}
         onDelete={handleTaskDelete}
-        onEdit={(task) => {
-          setEditingTask(task);
-          setIsModalOpen(true);
-        }}
+        onEdit={(task) => setEditingTask(task)}
       />
 
       <CreateListModal
