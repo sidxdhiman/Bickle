@@ -25,8 +25,8 @@ export const DashboardSkeleton = () => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {[...Array(4)].map((_, i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+        {[...Array(5)].map((_, i) => (
           <div key={i} className="p-6 rounded-2xl bg-secondary border border-border">
             <div className="flex items-center justify-between mb-2">
               <Skeleton className="h-4 w-20" />

@@ -129,12 +129,10 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
                 className="p-2 rounded-lg hover:bg-accent transition-colors relative"
               >
                 <Bell className="w-5 h-5 text-muted-foreground" />
-                {chatUnread > 0 ? (
+                {chatUnread > 0 && (
                   <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-secondary">
                     {chatUnread > 9 ? '9+' : chatUnread}
                   </span>
-                ) : (
-                  <span className="absolute top-2 right-2 w-2 h-2 bg-primary border-2 border-secondary"></span>
                 )}
               </button>
               <div ref={profileRef} className="flex items-center gap-3 pl-3 border-l border-border">

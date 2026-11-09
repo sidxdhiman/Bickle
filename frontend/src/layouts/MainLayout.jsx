@@ -56,8 +56,9 @@ const MainLayout = () => {
           onMenuClick={() => setIsSidebarOpen((open) => !open)}
         />
         <main
+          key={pathname}
           ref={mainRef}
-          className={`flex-1 overflow-y-auto p-6 pt-4 scrollbar-hide ${spaceClass}`}
+          className={`flex-1 overflow-y-auto p-6 pt-4 scrollbar-hide page-enter ${spaceClass}`}
           style={
             dockMode
               ? { '--dock-footprint': `${settings.size + settings.padding * 2 + 28}px` }

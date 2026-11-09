@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { CheckCircle, Clock, Calendar, FileText, TrendingUp, AlertCircle, Tally4, Check } from 'lucide-react';
+import { CheckCircle, Clock, Calendar, FileText, TrendingUp, Tally4, Check, ArrowRight } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { DashboardSkeleton } from '../components/Skeletons';
 import { peek, stash } from '../utils/pageCache';
 import { upsertSearchDoc } from '../utils/searchIndex';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -14,8 +15,19 @@ function cn(...inputs) {
 
 const DASH_CACHE = 'dashboard';
 
+const greetingFor = (date = new Date()) => {
+  const hour = date.getHours();
+  if (hour < 5) return 'Still up';
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  if (hour < 21) return 'Good evening';
+  return 'Good night';
+};
+
 const Dashboard = () => {
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
+  const firstName = (currentUser?.username || '').trim().split(/\s+/)[0];
   const [stats, setStats] = useState(() => peek(DASH_CACHE)?.stats ?? {
     tasksDue: 0,
     tasksCompleted: 0,
@@ -132,83 +144,51 @@ const Dashboard = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
       <header className="text-center sm:text-left">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back! 👋</h1>
-        <p className="text-sm sm:text-base text-muted-foreground">Here's what's happening with your productivity today.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+          {greetingFor()}{firstName ? `, ${firstName}` : ''}
+        </h1>
+        <p className="text-sm sm:text-base text-muted-foreground">
+          {stats.overdueTasks > 0
+            ? `${stats.overdueTasks} ${stats.overdueTasks === 1 ? 'task is' : 'tasks are'} overdue — everything else looks calm.`
+            : 'Everything important, in one glance.'}
+        </p>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div
-          onClick={() => navigate('/tasks')}
-          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-muted-foreground">Tasks Due Today</p>
-            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.tasksDue}</p>
-          {stats.overdueTasks > 0 && (
-            <p className="text-xs text-red-500 mt-1">{stats.overdueTasks} overdue</p>
-          )}
-        </div>
-
-        <div
-          onClick={() => navigate('/tasks')}
-          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-muted-foreground">Completed Tasks</p>
-            <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.tasksCompleted}</p>
-          <p className="text-xs text-green-500 mt-1">Total completed</p>
-        </div>
-
-        <div
-          onClick={() => navigate('/calendar')}
-          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-muted-foreground">Upcoming Events</p>
-            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.upcomingEvents}</p>
-          <p className="text-xs text-blue-500 mt-1">Scheduled ahead</p>
-        </div>
-
-        <div
-          onClick={() => navigate('/notes')}
-          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-muted-foreground">Notes</p>
-            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{stats.notes}</p>
-          <p className="text-xs text-purple-500 mt-1">Total notes</p>
-        </div>
-
-        <div
-          onClick={() => navigate('/habits')}
-          className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border hover:border-primary/50 transition-all duration-300 cursor-pointer group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs sm:text-sm text-muted-foreground">Active Habits</p>
-            <Tally4 className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
-          </div>
-          <p className="text-2xl sm:text-3xl font-bold group-hover:text-primary transition-colors">{habits.length}</p>
-          <p className="text-xs text-cyan-500 mt-1">Tracking today</p>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5">
+        {[
+          { label: 'Due today', value: stats.tasksDue, icon: Clock, to: '/tasks', hint: stats.overdueTasks > 0 ? `${stats.overdueTasks} overdue` : 'On schedule', hintClass: stats.overdueTasks > 0 ? 'text-red-500' : 'text-muted-foreground' },
+          { label: 'Completed', value: stats.tasksCompleted, icon: CheckCircle, to: '/tasks', hint: 'All time', hintClass: 'text-muted-foreground' },
+          { label: 'Events ahead', value: stats.upcomingEvents, icon: Calendar, to: '/calendar', hint: 'On the calendar', hintClass: 'text-muted-foreground' },
+          { label: 'Notes', value: stats.notes, icon: FileText, to: '/notes', hint: 'In your library', hintClass: 'text-muted-foreground' },
+          { label: 'Habits', value: habits.length, icon: Tally4, to: '/habits', hint: 'Being tracked', hintClass: 'text-muted-foreground' },
+        ].map((stat) => (
+          <button
+            key={stat.label}
+            type="button"
+            onClick={() => navigate(stat.to)}
+            className="text-left p-5 rounded-2xl bg-secondary border border-border hover:border-primary/50 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10 transition-all duration-200 group"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs sm:text-sm text-muted-foreground">{stat.label}</p>
+              <stat.icon className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground group-hover:text-primary transition-colors" />
+            </div>
+            <p className="text-2xl sm:text-3xl font-bold tabular-nums group-hover:text-primary transition-colors">{stat.value}</p>
+            <p className={cn('text-xs mt-1', stat.hintClass)}>{stat.hint}</p>
+          </button>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2 p-5 sm:p-6 rounded-2xl bg-secondary border border-border">
-          <h3
+          <button
+            type="button"
             onClick={() => navigate('/tasks')}
-            className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+            className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group w-full"
           >
             <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
             Recent Tasks
-          </h3>
+            <ArrowRight className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 -translate-x-1 transition-all" />
+          </button>
           {recentTasks.length > 0 ? (
             <div className="space-y-2 sm:space-y-3">
               {recentTasks.map((task) => (
@@ -241,19 +221,21 @@ const Dashboard = () => {
           ) : (
             <div className="text-center py-6 sm:py-8 text-muted-foreground">
               <FileText className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm sm:text-base">No tasks yet. Create your first task to get started!</p>
+              <p className="text-sm sm:text-base">No tasks yet. Add one when something comes up.</p>
             </div>
           )}
         </div>
 
         <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border flex flex-col gap-4">
-          <h3
+          <button
+            type="button"
             onClick={() => navigate('/habits')}
-            className="text-base sm:text-lg font-semibold flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+            className="text-base sm:text-lg font-semibold flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group w-full"
           >
             <Tally4 className="w-4 h-4 sm:w-5 sm:h-5" />
             Daily Habits
-          </h3>
+            <ArrowRight className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 -translate-x-1 transition-all" />
+          </button>
           {habits.length > 0 ? (
             <div className="space-y-2 flex-1">
               {habits.slice(0, 5).map((habit) => {
@@ -289,7 +271,7 @@ const Dashboard = () => {
           ) : (
             <div className="text-center py-6 sm:py-8 text-muted-foreground flex-1 flex flex-col items-center justify-center">
               <Tally4 className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm sm:text-base">No habits yet. Create one!</p>
+              <p className="text-sm sm:text-base">No habits yet. Start one when you're ready.</p>
             </div>
           )}
         </div>
@@ -297,13 +279,15 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 gap-4 sm:gap-6">
         <div className="p-5 sm:p-6 rounded-2xl bg-secondary border border-border">
-          <h3
+          <button
+            type="button"
             onClick={() => navigate('/calendar')}
-            className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+            className="text-base sm:text-lg font-semibold mb-4 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group w-full"
           >
             <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
             Upcoming Events
-          </h3>
+            <ArrowRight className="w-4 h-4 ml-auto opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 -translate-x-1 transition-all" />
+          </button>
           {upcomingEvents.length > 0 ? (
             <div className="space-y-2 sm:space-y-3">
               {upcomingEvents.map((event) => (
@@ -325,7 +309,7 @@ const Dashboard = () => {
           ) : (
             <div className="text-center py-6 sm:py-8 text-muted-foreground">
               <Calendar className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 opacity-50" />
-              <p className="text-sm sm:text-base">No upcoming events. Schedule your first event!</p>
+              <p className="text-sm sm:text-base">Nothing on the calendar yet.</p>
             </div>
           )}
         </div>

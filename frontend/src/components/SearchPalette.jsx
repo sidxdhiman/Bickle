@@ -174,11 +174,11 @@ const SearchPalette = ({ isOpen, onClose }) => {
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-[10vh]"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-[10vh] backdrop-enter"
       onClick={onClose}
     >
       <div
-        className="bg-background border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[70vh]"
+        className="bg-background border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[70vh] palette-enter"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 border-b border-border">
