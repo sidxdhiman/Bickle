@@ -1,19 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Bell, User, Clock, LogOut, Menu } from 'lucide-react';
+import { Search, User, Clock, LogOut, Menu } from 'lucide-react';
 import ProfileModal from './ProfileModal';
 import SearchPalette from './SearchPalette';
+import NotificationBell from './NotificationBell';
 import { useAccess } from '../context/AccessContext';
 import { useNavMode } from '../hooks/useNavMode';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { useChatUnread } from '../hooks/useChatUnread';
 
 const TopNav = ({ showMenu = false, onMenuClick }) => {
   const { isGuest, expiresAt, endGuest } = useAccess();
   const [navMode] = useNavMode();
-  const navigate = useNavigate();
   const currentUser = useCurrentUser();
-  const chatUnread = useChatUnread();
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -123,18 +120,7 @@ const TopNav = ({ showMenu = false, onMenuClick }) => {
             </>
           ) : (
             <>
-              <button
-                onClick={() => navigate('/chat')}
-                aria-label={chatUnread > 0 ? `Chat, ${chatUnread} unread messages` : 'Chat'}
-                className="p-2 rounded-lg hover:bg-accent transition-colors relative"
-              >
-                <Bell className="w-5 h-5 text-muted-foreground" />
-                {chatUnread > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center border-2 border-secondary">
-                    {chatUnread > 9 ? '9+' : chatUnread}
-                  </span>
-                )}
-              </button>
+              <NotificationBell />
               <div ref={profileRef} className="flex items-center gap-3 pl-3 border-l border-border">
                 <div className="text-right hidden sm:block cursor-pointer" onClick={() => setShowProfile(true)}>
                   <p className="text-sm font-semibold leading-none">{currentUser?.username || 'Bickle'}</p>

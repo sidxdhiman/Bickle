@@ -845,6 +845,20 @@ const TaskPage = () => {
     fetchData();
   }, []);
 
+  // Notification deep link while already on this page: the mount effect
+  // above only sees ?taskId= on first load, so watch for it on navigation.
+  useEffect(() => {
+    if (loading) return;
+    const taskId = searchParams.get('taskId');
+    if (!taskId) return;
+    const found = tasks.find(t => t._id === taskId);
+    if (found) {
+      setSelectedTask(found);
+      setIsDetailModalOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, loading, tasks, setSearchParams]);
+
   // Keep the cache in sync so revisiting the page is instant
   useEffect(() => {
     if (!loading) stash('tasks', { tasks, lists });
