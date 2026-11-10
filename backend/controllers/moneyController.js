@@ -1,5 +1,6 @@
-const Transaction = require('../models/Transaction');
-const UserCategory = require('../models/UserCategory');
+const {
+  insert, find, findOne, query, updateWhere, findAndDelete, buildWhere, tx,
+} = require('../db/helpers');
 const { scopeFilter } = require('../middleware/scope');
 
 // Default categories for new users
@@ -17,7 +18,7 @@ exports.addTransaction = async (req, res) => {
       return res.status(400).json({ message: 'Type, amount, and category are required' });
     }
 
-    const transaction = new Transaction({
+    const transaction = insert('transactions', {
       guestSession: req.dataScope.guestSession,
       userId: req.dataScope.user,
       type,
@@ -27,7 +28,6 @@ exports.addTransaction = async (req, res) => {
       date: date ? new Date(date) : new Date(),
     });
 
-    await transaction.save();
     res.status(201).json({ message: 'Transaction added successfully', transaction });
   } catch (error) {
     res.status(500).json({ message: 'Error adding transaction', error: error.message });
@@ -37,9 +37,10 @@ exports.addTransaction = async (req, res) => {
 // Recent transactions across all months — used by the grant-access picker.
 exports.getAllTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find(scopeFilter(req, 'userId'))
-      .sort({ date: -1 })
-      .limit(500);
+    const transactions = find('transactions', scopeFilter(req, 'userId'), {
+      orderBy: '"date" DESC',
+      limit: 500,
+    });
     res.json(transactions);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching transactions', error: error.message });
@@ -58,10 +59,13 @@ exports.getMonthlyTransactions = async (req, res) => {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59);
 
-    const transactions = await Transaction.find({
-      ...scopeFilter(req, 'userId'),
-      date: { $gte: startDate, $lte: endDate },
-    }).sort({ date: -1 });
+    const scope = buildWhere(scopeFilter(req, 'userId'));
+    const transactions = query(
+      'transactions',
+      `SELECT * FROM "transactions" ${scope.sql || 'WHERE 1=1'} ` +
+        'AND "date" >= ? AND "date" <= ? ORDER BY "date" DESC',
+      [...scope.params, startDate.toISOString(), endDate.toISOString()]
+    );
 
     // Calculate totals
     const totals = {
@@ -103,10 +107,10 @@ exports.updateTransaction = async (req, res) => {
     const { id } = req.params;
     const { type, amount, category, description, date } = req.body;
 
-    const transaction = await Transaction.findOneAndUpdate(
+    const transaction = updateWhere(
+      'transactions',
       { _id: id, ...scopeFilter(req, 'userId') },
-      { type, amount, category, description, date: date ? new Date(date) : undefined },
-      { new: true }
+      { type, amount, category, description, date: date ? new Date(date) : undefined }
     );
 
     if (!transaction) {
@@ -124,7 +128,7 @@ exports.deleteTransaction = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const transaction = await Transaction.findOneAndDelete({ _id: id, ...scopeFilter(req, 'userId') });
+    const transaction = findAndDelete('transactions', { _id: id, ...scopeFilter(req, 'userId') });
 
     if (!transaction) {
       return res.status(404).json({ message: 'Transaction not found' });
@@ -140,7 +144,7 @@ exports.deleteTransaction = async (req, res) => {
 exports.initializeDefaultCategories = async (req, res) => {
   try {
     // Check if categories already exist in this partition
-    const existingCategories = await UserCategory.findOne(scopeFilter(req, 'userId'));
+    const existingCategories = findOne('user_categories', scopeFilter(req, 'userId'));
     if (existingCategories) {
       return res.status(200).json({ message: 'Categories already initialized' });
     }
@@ -167,7 +171,9 @@ exports.initializeDefaultCategories = async (req, res) => {
       });
     });
 
-    await UserCategory.insertMany(categoriesToCreate);
+    tx(() => {
+      categoriesToCreate.forEach((category) => insert('user_categories', category));
+    });
     res.status(201).json({ message: 'Default categories initialized' });
   } catch (error) {
     res.status(500).json({ message: 'Error initializing categories', error: error.message });
@@ -179,12 +185,12 @@ exports.getCategories = async (req, res) => {
   try {
     const { type } = req.query;
 
-    let query = scopeFilter(req, 'userId');
+    const where = scopeFilter(req, 'userId');
     if (type) {
-      query.type = type;
+      where.type = type;
     }
 
-    const categories = await UserCategory.find(query).sort({ name: 1 });
+    const categories = find('user_categories', where, { orderBy: '"name" ASC' });
 
     res.status(200).json({ categories });
   } catch (error) {
@@ -201,7 +207,7 @@ exports.addCategory = async (req, res) => {
       return res.status(400).json({ message: 'Name and type are required' });
     }
 
-    const category = new UserCategory({
+    const category = insert('user_categories', {
       guestSession: req.dataScope.guestSession,
       userId: req.dataScope.user,
       name,
@@ -209,7 +215,6 @@ exports.addCategory = async (req, res) => {
       color: color || '#3B82F6',
     });
 
-    await category.save();
     res.status(201).json({ message: 'Category added successfully', category });
   } catch (error) {
     if (error.code === 11000) {
@@ -224,7 +229,7 @@ exports.deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const category = await UserCategory.findOneAndDelete({ _id: id, ...scopeFilter(req, 'userId') });
+    const category = findAndDelete('user_categories', { _id: id, ...scopeFilter(req, 'userId') });
 
     if (!category) {
       return res.status(404).json({ message: 'Category not found' });

@@ -204,6 +204,22 @@ function deleteWhere(table, where) {
   return info.changes;
 }
 
+// findOne + act-by-_id, returning the matched doc (or null). Replicates the
+// mongoose findOneAndUpdate / findOneAndDelete return contract used by the
+// uniform {_id, ...scope} controller pattern.
+function updateWhere(table, where, patch) {
+  const doc = findOne(table, where);
+  if (!doc) return null;
+  return updateById(table, doc._id, patch);
+}
+
+function findAndDelete(table, where) {
+  const doc = findOne(table, where);
+  if (!doc) return null;
+  deleteById(table, doc._id);
+  return doc;
+}
+
 // Multi-statement atomicity: better-sqlite3 is synchronous, so this is a
 // real transaction (and nests as a savepoint). Replaces the non-atomic
 // multi-document writes the Mongo code always had.
@@ -232,5 +248,7 @@ module.exports = {
   deleteById,
   findByIdAndDelete,
   deleteWhere,
+  updateWhere,
+  findAndDelete,
   tx,
 };

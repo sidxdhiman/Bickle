@@ -1,4 +1,4 @@
-const Habit = require('../models/Habit');
+const { insert, find, findOne, updateById, updateWhere, findAndDelete } = require('../db/helpers');
 const { scopeFilter } = require('../middleware/scope');
 
 // Normalize any date to its local midnight timestamp (day-level identity)
@@ -32,12 +32,18 @@ const computeStreak = (completedDates) => {
   return streak;
 };
 
+// mongoose Date cast parity: epoch numbers and ISO strings both serialize as
+// ISO-8601 in JSON, so normalise every date on the way in.
+const toIso = (value) => (value == null ? null : new Date(value).toISOString());
+
 // @desc    Get all habits for a user
 // @route   GET /api/habits
 // @access  Private
 exports.getHabits = async (req, res) => {
   try {
-    const habits = await Habit.find(scopeFilter(req, 'userId')).sort({ createdAt: -1 });
+    const habits = find('habits', scopeFilter(req, 'userId'), {
+      orderBy: '"createdAt" DESC',
+    });
     res.json(habits);
   } catch (err) {
     console.error(err.message);
@@ -50,7 +56,7 @@ exports.getHabits = async (req, res) => {
 // @access  Private
 exports.getHabitById = async (req, res) => {
   try {
-    const habit = await Habit.findOne({ _id: req.params.id, ...scopeFilter(req, 'userId') });
+    const habit = findOne('habits', { _id: req.params.id, ...scopeFilter(req, 'userId') });
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
     }
@@ -76,15 +82,13 @@ exports.createHabit = async (req, res) => {
   }
 
   try {
-    const newHabit = new Habit({
+    const habit = insert('habits', {
       userId: req.dataScope.user,
       guestSession: req.dataScope.guestSession,
       name,
       description,
       frequency,
     });
-
-    const habit = await newHabit.save();
     res.status(201).json(habit);
   } catch (err) {
     console.error(err.message);
@@ -103,14 +107,14 @@ exports.updateHabit = async (req, res) => {
   if (name) habitFields.name = name;
   if (description) habitFields.description = description;
   if (frequency) habitFields.frequency = frequency;
-  if (lastCompleted) habitFields.lastCompleted = lastCompleted;
+  if (lastCompleted) habitFields.lastCompleted = toIso(lastCompleted);
   if (streak !== undefined) habitFields.streak = streak;
 
   try {
-    const habit = await Habit.findOneAndUpdate(
+    const habit = updateWhere(
+      'habits',
       { _id: req.params.id, ...scopeFilter(req, 'userId') },
-      { $set: habitFields },
-      { new: true }
+      habitFields
     );
 
     if (!habit) {
@@ -132,7 +136,7 @@ exports.updateHabit = async (req, res) => {
 // @access  Private
 exports.deleteHabit = async (req, res) => {
   try {
-    const habit = await Habit.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req, 'userId') });
+    const habit = findAndDelete('habits', { _id: req.params.id, ...scopeFilter(req, 'userId') });
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
@@ -153,7 +157,7 @@ exports.deleteHabit = async (req, res) => {
 // @access  Private
 exports.completeHabit = async (req, res) => {
   try {
-    const habit = await Habit.findOne({ _id: req.params.id, ...scopeFilter(req, 'userId') });
+    const habit = findOne('habits', { _id: req.params.id, ...scopeFilter(req, 'userId') });
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
@@ -173,12 +177,13 @@ exports.completeHabit = async (req, res) => {
       return res.status(400).json({ msg: 'Habit already completed today' });
     }
 
-    habit.completedDates.push(Date.now());
-    habit.lastCompleted = Date.now();
-    habit.streak = computeStreak(habit.completedDates);
-
-    await habit.save();
-    res.json(habit);
+    const completedDates = [...(habit.completedDates || []), Date.now()];
+    const updated = updateById('habits', habit._id, {
+      completedDates: completedDates.map(toIso),
+      lastCompleted: toIso(Date.now()),
+      streak: computeStreak(completedDates),
+    });
+    res.json(updated);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');
@@ -190,7 +195,7 @@ exports.completeHabit = async (req, res) => {
 // @access  Private
 exports.uncompleteHabit = async (req, res) => {
   try {
-    const habit = await Habit.findOne({ _id: req.params.id, ...scopeFilter(req, 'userId') });
+    const habit = findOne('habits', { _id: req.params.id, ...scopeFilter(req, 'userId') });
 
     if (!habit) {
       return res.status(404).json({ msg: 'Habit not found' });
@@ -201,28 +206,29 @@ exports.uncompleteHabit = async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const remaining = (habit.completedDates || []).filter((d) => {
+    const existing = habit.completedDates || [];
+    const remaining = existing.filter((d) => {
       const ts = new Date(d).getTime();
       return ts < today.getTime() || ts >= tomorrow.getTime();
     });
 
-    if (remaining.length === (habit.completedDates || []).length) {
+    if (remaining.length === existing.length) {
       return res.status(400).json({ msg: 'Habit not completed today' });
     }
 
-    habit.completedDates = remaining;
-    habit.streak = computeStreak(remaining);
-
     // Point lastCompleted at the most recent remaining day (or clear it)
+    let lastCompleted = null;
     if (remaining.length > 0) {
       const latest = remaining.reduce((max, d) => (new Date(d) > new Date(max) ? d : max), remaining[0]);
-      habit.lastCompleted = latest;
-    } else {
-      habit.lastCompleted = null;
+      lastCompleted = toIso(latest);
     }
 
-    await habit.save();
-    res.json(habit);
+    const updated = updateById('habits', habit._id, {
+      completedDates: remaining.map(toIso),
+      streak: computeStreak(remaining),
+      lastCompleted,
+    });
+    res.json(updated);
   } catch (err) {
     console.error(err.message);
     res.status(500).send('Server Error');

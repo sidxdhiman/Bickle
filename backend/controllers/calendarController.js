@@ -1,5 +1,4 @@
-const CalendarEvent = require('../models/CalendarEvent');
-const Task = require('../models/Task');
+const { insert, find, query, updateWhere, findAndDelete, buildWhere } = require('../db/helpers');
 const { scopeFilter, scopeFields, sanitizeBody } = require('../middleware/scope');
 
 exports.createEvent = async (req, res) => {
@@ -8,7 +7,7 @@ exports.createEvent = async (req, res) => {
     if (body.recurrence && body.recurrence.frequency === 'none') {
       delete body.recurrence;
     }
-    const event = await CalendarEvent.create({ ...body, ...scopeFields(req) });
+    const event = insert('calendar_events', { ...body, ...scopeFields(req) });
     res.status(201).json(event);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -18,14 +17,20 @@ exports.createEvent = async (req, res) => {
 exports.getEvents = async (req, res) => {
   try {
     const { start, end } = req.query;
-    const filter = scopeFilter(req);
+    const where = scopeFilter(req);
 
+    let events;
     if (start && end) {
-      filter.start = { $gte: new Date(start) };
-      filter.end = { $lte: new Date(end) };
+      const scope = buildWhere(where);
+      events = query(
+        'calendar_events',
+        `SELECT * FROM "calendar_events" ${scope.sql || 'WHERE 1=1'} ` +
+          'AND "start" >= ? AND "end" <= ? ORDER BY "start" ASC',
+        [...scope.params, new Date(start).toISOString(), new Date(end).toISOString()]
+      );
+    } else {
+      events = find('calendar_events', where, { orderBy: '"start" ASC' });
     }
-
-    const events = await CalendarEvent.find(filter).sort({ start: 1 });
     res.json(events);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -38,10 +43,10 @@ exports.updateEvent = async (req, res) => {
     if (body.recurrence && body.recurrence.frequency === 'none') {
       delete body.recurrence;
     }
-    const event = await CalendarEvent.findOneAndUpdate(
+    const event = updateWhere(
+      'calendar_events',
       { _id: req.params.id, ...scopeFilter(req) },
-      body,
-      { new: true }
+      body
     );
     if (!event) return res.status(404).json({ message: 'Event not found' });
     res.json(event);
@@ -52,7 +57,7 @@ exports.updateEvent = async (req, res) => {
 
 exports.deleteEvent = async (req, res) => {
   try {
-    const event = await CalendarEvent.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
+    const event = findAndDelete('calendar_events', { _id: req.params.id, ...scopeFilter(req) });
     if (!event) return res.status(404).json({ message: 'Event not found' });
     res.json({ message: 'Event deleted' });
   } catch (error) {
@@ -62,10 +67,12 @@ exports.deleteEvent = async (req, res) => {
 
 exports.syncTasksToCalendar = async (req, res) => {
   try {
-    const tasks = await Task.find({
-      ...scopeFilter(req),
-      dueDate: { $exists: true }
-    });
+    const scope = buildWhere(scopeFilter(req));
+    const tasks = query(
+      'tasks',
+      `SELECT * FROM "tasks" ${scope.sql || 'WHERE 1=1'} AND "dueDate" IS NOT NULL`,
+      scope.params
+    );
 
     const events = tasks.map(task => ({
       title: `📅 ${task.title}`,

@@ -1,4 +1,4 @@
-const Sleep = require('../models/Sleep');
+const { insert, find, updateWhere, findAndDelete } = require('../db/helpers');
 const { scopeFilter, scopeFields } = require('../middleware/scope');
 
 // --- Sleep Record Controllers ---
@@ -10,7 +10,7 @@ exports.createSleep = async (req, res) => {
     const sleepEndDate = new Date(sleepEnd);
     const duration = Math.round((sleepEndDate - sleepStartDate) / (1000 * 60)); // minutes
 
-    const sleep = await Sleep.create({
+    const sleep = insert('sleeps', {
       ...scopeFields(req),
       date: new Date(date),
       sleepStart: sleepStartDate,
@@ -27,7 +27,7 @@ exports.createSleep = async (req, res) => {
 
 exports.getSleeps = async (req, res) => {
   try {
-    const sleeps = await Sleep.find(scopeFilter(req)).sort({ date: -1 });
+    const sleeps = find('sleeps', scopeFilter(req), { orderBy: '"date" DESC' });
     res.json(sleeps);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -41,7 +41,8 @@ exports.updateSleep = async (req, res) => {
     const sleepEndDate = new Date(sleepEnd);
     const duration = Math.round((sleepEndDate - sleepStartDate) / (1000 * 60));
 
-    const sleep = await Sleep.findOneAndUpdate(
+    const sleep = updateWhere(
+      'sleeps',
       { _id: req.params.id, ...scopeFilter(req) },
       {
         date: new Date(date),
@@ -50,8 +51,7 @@ exports.updateSleep = async (req, res) => {
         duration,
         quality,
         notes,
-      },
-      { new: true }
+      }
     );
     if (!sleep) return res.status(404).json({ message: 'Sleep record not found' });
     res.json(sleep);
@@ -62,7 +62,7 @@ exports.updateSleep = async (req, res) => {
 
 exports.deleteSleep = async (req, res) => {
   try {
-    const sleep = await Sleep.findOneAndDelete({ _id: req.params.id, ...scopeFilter(req) });
+    const sleep = findAndDelete('sleeps', { _id: req.params.id, ...scopeFilter(req) });
     if (!sleep) return res.status(404).json({ message: 'Sleep record not found' });
     res.json({ message: 'Sleep record deleted' });
   } catch (error) {
