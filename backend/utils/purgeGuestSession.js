@@ -1,24 +1,13 @@
 const fs = require('fs/promises');
 const path = require('path');
-const Task = require('../models/Task');
-const TaskList = require('../models/TaskList');
-const Note = require('../models/Note');
-const Category = require('../models/Category');
-const Habit = require('../models/Habit');
-const Sleep = require('../models/Sleep');
-const Transaction = require('../models/Transaction');
-const UserCategory = require('../models/UserCategory');
-const CalendarEvent = require('../models/CalendarEvent');
-const Whiteboard = require('../models/Whiteboard');
-const ArtBlog = require('../models/ArtBlog');
-const ArtPhoto = require('../models/ArtPhoto');
-const ArtVideo = require('../models/ArtVideo');
-const ArtMusic = require('../models/ArtMusic');
-const GuestSession = require('../models/GuestSession');
+const { query, all, deleteWhere, tx, nowIso } = require('../db/helpers');
 
-const MODELS = [
-  Task, TaskList, Note, Category, Habit, Sleep, Transaction, UserCategory,
-  CalendarEvent, Whiteboard, ArtBlog, ArtPhoto, ArtVideo, ArtMusic,
+// The 14 partitioned tables — guest data lives in rows whose guestSession
+// column matches the session id. Mirrors the old MODELS list exactly.
+const PARTITIONED_TABLES = [
+  'tasks', 'task_lists', 'notes', 'categories', 'habits', 'sleeps',
+  'transactions', 'user_categories', 'calendar_events', 'whiteboards',
+  'art_blogs', 'art_photos', 'art_videos', 'art_music',
 ];
 
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads', 'art');
@@ -37,21 +26,25 @@ const removeFile = async (publicPath) => {
 };
 
 // Best-effort cleanup of guest-uploaded art files before the docs disappear.
-// Shared copies (sharedCopy: true) point at the OWNER's files — never delete those.
+// Shared copies (sharedCopy: true) point at the OWNER's files — never delete
+// those. (Mongo's {$ne: true} matches our sharedCopy = 0 exactly, since the
+// column is NOT NULL with a default.)
 const removeGuestArtFiles = async (sessionId) => {
   try {
-    const notShared = { guestSession: sessionId, sharedCopy: { $ne: true } };
-    const [blogs, photos, videos, music] = await Promise.all([
-      ArtBlog.find(notShared).lean(),
-      ArtPhoto.find(notShared).lean(),
-      ArtVideo.find(notShared).lean(),
-      ArtMusic.find(notShared).lean(),
-    ]);
+    const photoUrls = query('art_photos',
+      'SELECT "url" FROM "art_photos" WHERE "guestSession" = ? AND "sharedCopy" = 0', [sessionId]);
+    const videoUrls = query('art_videos',
+      'SELECT "url" FROM "art_videos" WHERE "guestSession" = ? AND "sharedCopy" = 0', [sessionId]);
+    const musicUrls = query('art_music',
+      'SELECT "url" FROM "art_music" WHERE "guestSession" = ? AND "sharedCopy" = 0', [sessionId]);
+    const blogRows = query('art_blogs',
+      'SELECT "images" FROM "art_blogs" WHERE "guestSession" = ? AND "sharedCopy" = 0', [sessionId]);
+
     const urls = [
-      ...photos.map((d) => d.url),
-      ...videos.map((d) => d.url),
-      ...music.map((d) => d.url),
-      ...blogs.flatMap((d) => [d.url, ...(d.images || [])]),
+      ...photoUrls.map((row) => row.url),
+      ...videoUrls.map((row) => row.url),
+      ...musicUrls.map((row) => row.url),
+      ...blogRows.flatMap((row) => row.images || []),
     ];
     await Promise.all(urls.map(removeFile));
   } catch (error) {
@@ -59,19 +52,26 @@ const removeGuestArtFiles = async (sessionId) => {
   }
 };
 
-// Delete every document belonging to one guest session: its temporary partition.
+// Delete every row belonging to one guest session: its temporary partition.
 const purgeGuestData = async (sessionId) => {
   if (!sessionId) return;
   await removeGuestArtFiles(sessionId);
-  await Promise.all(MODELS.map((Model) => Model.deleteMany({ guestSession: sessionId })));
+  tx(() => {
+    for (const table of PARTITIONED_TABLES) {
+      deleteWhere(table, { guestSession: sessionId });
+    }
+  });
 };
 
 // Purge data for every session that is no longer live (expired or revoked).
 const purgeStaleSessions = async () => {
-  const stale = await GuestSession.find({
-    $or: [{ active: false }, { expiresAt: { $lte: new Date() } }],
-  }).select('_id');
-  await Promise.all(stale.map((s) => purgeGuestData(s._id)));
+  const stale = all(
+    'SELECT "_id" FROM "guest_sessions" WHERE "active" = 0 OR "expiresAt" <= ?',
+    [nowIso()],
+  );
+  for (const session of stale) {
+    await purgeGuestData(session._id);
+  }
   return stale.length;
 };
 

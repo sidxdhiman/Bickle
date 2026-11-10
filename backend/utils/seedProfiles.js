@@ -1,15 +1,16 @@
-const User = require('../models/User');
+const { findOne, insert, updateById, count } = require('../db/helpers');
+const { hashPassword, comparePassword } = require('./passwords');
 const { PROFILES, SEED_PASSWORD } = require('../config/profiles');
 
-// Resolves a profile key to its user document, tolerating pre-profile
-// databases where the owner account still had legacy credentials.
-const findProfileUser = async (profile) => {
-  let user = await User.findOne({ email: profile.email });
+// Resolves a profile key to its user row, tolerating pre-profile databases
+// where the owner account still had legacy credentials.
+const findProfileUser = (profile) => {
+  let user = findOne('users', { email: profile.email });
   if (!user && profile.key === 'me') {
-    user = await User.findOne({ email: 'dev@bickle.com' });
+    user = findOne('users', { email: 'dev@bickle.com' });
   }
   if (!user) {
-    user = await User.findOne({ username: profile.username });
+    user = findOne('users', { username: profile.username });
   }
   return user;
 };
@@ -23,27 +24,44 @@ const findProfileUser = async (profile) => {
 const ensureProfileAccounts = async () => {
   for (const profile of PROFILES) {
     try {
-      const user = (await findProfileUser(profile)) || new User({ password: SEED_PASSWORD });
+      const user = findProfileUser(profile);
+
+      if (!user) {
+        insert('users', {
+          email: profile.email,
+          username: profile.username,
+          password: await hashPassword(SEED_PASSWORD),
+          showcase: profile.showcase,
+          avatar: '',
+        });
+        continue;
+      }
+
+      const patch = {};
 
       if (!user.email) {
-        user.email = profile.email;
+        patch.email = profile.email;
       } else if (profile.key === 'me' && user.email === 'dev@bickle.com') {
-        user.email = profile.email;
+        patch.email = profile.email;
       }
 
       // Seed accounts keep deterministic credentials — there is no
       // password-reset UI, so the boot seed is the source of truth.
-      if (!(await user.comparePassword(SEED_PASSWORD))) user.password = SEED_PASSWORD;
-      if (!user.username) {
-        user.username = profile.username;
-      } else if (user.username !== profile.username) {
-        const clash = await User.findOne({ username: profile.username, _id: { $ne: user._id } });
-        if (!clash) user.username = profile.username;
+      if (!(await comparePassword(SEED_PASSWORD, user.password))) {
+        patch.password = await hashPassword(SEED_PASSWORD);
       }
-      if (user.showcase !== profile.showcase) user.showcase = profile.showcase;
-      if (!user.avatar) user.avatar = '';
 
-      await user.save();
+      if (!user.username) {
+        patch.username = profile.username;
+      } else if (user.username !== profile.username) {
+        const clash = findOne('users', { username: profile.username });
+        if (!clash || clash._id === user._id) patch.username = profile.username;
+      }
+
+      if (user.showcase !== profile.showcase) patch.showcase = profile.showcase;
+      if (!user.avatar) patch.avatar = '';
+
+      if (Object.keys(patch).length > 0) updateById('users', user._id, patch);
     } catch (error) {
       console.warn(`Profile seed failed for "${profile.key}":`, error.message);
     }
@@ -51,12 +69,11 @@ const ensureProfileAccounts = async () => {
 
   // Safety net: never leave the DB without a showcase profile.
   try {
-    const flagged = await User.countDocuments({ showcase: true });
+    const flagged = count('users', { showcase: true });
     if (flagged === 0) {
-      const fallback = await findProfileUser(PROFILES[0]);
+      const fallback = findProfileUser(PROFILES[0]);
       if (fallback && !fallback.showcase) {
-        fallback.showcase = true;
-        await fallback.save();
+        updateById('users', fallback._id, { showcase: true });
       }
     }
   } catch (error) {

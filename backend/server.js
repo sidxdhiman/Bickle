@@ -1,5 +1,4 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
@@ -9,6 +8,8 @@ if (!process.env.JWT_SECRET) {
   console.warn('Warning: JWT_SECRET is not set. Using an insecure development secret.');
   process.env.JWT_SECRET = 'bickle-dev-secret-change-me';
 }
+
+const { openDatabase, closeDatabase } = require('./db');
 
 const app = express();
 
@@ -47,19 +48,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: err.message || 'Something went wrong' });
 });
 
-const PORT = process.env.PORT || 5000;
-
-// Wipe temporary partitions left behind by expired/revoked guest sessions and
-// migrate per-partition unique indexes (Category/UserCategory).
+// Boot-time housekeeping: wipe partitions left behind by expired/revoked
+// guest sessions, then make sure the seeded profile accounts exist.
 const cleanupPartitions = async () => {
-  try {
-    const Category = require('./models/Category');
-    const UserCategory = require('./models/UserCategory');
-    await Category.syncIndexes();
-    await UserCategory.syncIndexes();
-  } catch (error) {
-    console.warn('Partition index sync failed:', error.message);
-  }
   try {
     const { purgeStaleSessions } = require('./utils/purgeGuestSession');
     const purged = await purgeStaleSessions();
@@ -75,49 +66,42 @@ const cleanupPartitions = async () => {
   }
 };
 
-const startServer = async () => {
-  let mongoURI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bickle';
+// Opens the database, runs boot housekeeping and starts listening.
+// Returns { app, server, port } — the Electron main process uses the
+// returned port (it passes 0 for an ephemeral port).
+const startServer = async (options = {}) => {
+  const sqlitePath = options.sqlitePath
+    || process.env.SQLITE_PATH
+    || path.join(__dirname, 'data', 'bickle.db');
+  const port = options.port !== undefined ? options.port : Number(process.env.PORT) || 9000;
 
-  if (!process.env.MONGODB_URI) {
-    console.warn('Warning: MONGODB_URI is not set. Trying mongodb://127.0.0.1:27017/bickle first.');
-  }
+  openDatabase(sqlitePath);
+  await cleanupPartitions();
 
-  try {
-    await mongoose.connect(mongoURI);
-    console.log('Connected to MongoDB');
-    await cleanupPartitions();
-    app.listen(PORT, '127.0.0.1', () => console.log(`Server running on port ${PORT}`));
-    return;
-  } catch (err) {
-    console.error('MongoDB connection error:', err.message || err);
-    // If in development, fallback to an in-memory MongoDB
-    if (process.env.NODE_ENV !== 'production') {
-      try {
-        console.warn('Local MongoDB not available — starting in-memory MongoDB for development.');
-        const { MongoMemoryServer } = require('mongodb-memory-server');
-        const mongod = await MongoMemoryServer.create();
-        const memUri = mongod.getUri();
-        await mongoose.connect(memUri);
-        console.log('Connected to in-memory MongoDB');
-        await cleanupPartitions();
-        app.listen(PORT, '127.0.0.1', () => console.log(`Server running on port ${PORT}`));
-        // stop in-memory server on exit
-        const cleanExit = async () => {
-          await mongoose.disconnect();
-          await mongod.stop();
-          process.exit(0);
-        };
-        process.on('SIGINT', cleanExit);
-        process.on('SIGTERM', cleanExit);
-        return;
-      } catch (memErr) {
-        console.error('In-memory MongoDB failed to start:', memErr);
-        process.exit(1);
-      }
-    }
-
-    process.exit(1);
-  }
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, '127.0.0.1', () => {
+      const actualPort = server.address().port;
+      console.log(`Server running on port ${actualPort}`);
+      resolve({ app, server, port: actualPort });
+    });
+    server.on('error', reject);
+  });
 };
 
-startServer();
+// CLI entry (node server.js) — skipped when the Electron main process
+// requires this module to start the server itself.
+if (require.main === module) {
+  const cleanExit = () => {
+    closeDatabase();
+    process.exit(0);
+  };
+  process.on('SIGINT', cleanExit);
+  process.on('SIGTERM', cleanExit);
+
+  startServer().catch((error) => {
+    console.error('Failed to start server:', error.message || error);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, startServer };

@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const User = require('../models/User');
+const { get, all, findOne, insert, updateById } = require('../db/helpers');
+const { hashPassword, comparePassword } = require('../utils/passwords');
 const { PROFILES, profileByKey } = require('../config/profiles');
 const { findProfileUser } = require('../utils/seedProfiles');
 
@@ -16,6 +17,9 @@ const publicUser = (user) => ({
   showcase: !!user.showcase,
 });
 
+// Mongoose's lowercase+trim setters on the email path, applied at the edges.
+const normalizeEmail = (email) => String(email || '').trim().toLowerCase();
+
 // Public: powers the login profile picker. Exposes display names only —
 // never emails, avatars or password material. Profiles created from the app
 // are listed after the seeded ones and sign in with their username as key.
@@ -24,13 +28,18 @@ exports.listProfiles = async (req, res) => {
     const profiles = [];
     const seeded = [];
     for (const profile of PROFILES) {
-      const user = await findProfileUser(profile);
+      const user = findProfileUser(profile);
       if (user) seeded.push(user._id);
       profiles.push({ key: profile.key, username: user?.username || profile.username });
     }
-    const created = await User.find({ _id: { $nin: seeded } })
-      .select('username')
-      .sort({ createdAt: 1 });
+    const created = seeded.length === 0
+      ? all('SELECT "_id", "username" FROM "users" ORDER BY "createdAt" ASC')
+      : all(
+        `SELECT "_id", "username" FROM "users"
+         WHERE "_id" NOT IN (${seeded.map(() => '?').join(', ')})
+         ORDER BY "createdAt" ASC`,
+        seeded,
+      );
     for (const user of created) {
       profiles.push({ key: user.username, username: user.username });
     }
@@ -64,7 +73,7 @@ exports.createProfile = async (req, res) => {
       return res.status(400).json({ message: 'Password must be at least 6 characters' });
     }
 
-    const existing = await User.find({}).select('username');
+    const existing = all('SELECT "username" FROM "users"');
     if (existing.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
       return res.status(400).json({ message: 'That username is already taken' });
     }
@@ -75,7 +84,11 @@ exports.createProfile = async (req, res) => {
       username.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'profile';
     const email = `${slug}-${crypto.randomBytes(3).toString('hex')}@bickle.local`;
 
-    const user = await User.create({ username, email, password });
+    const user = insert('users', {
+      username,
+      email,
+      password: await hashPassword(password),
+    });
     res.status(201).json(publicUser(user));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -84,14 +97,23 @@ exports.createProfile = async (req, res) => {
 
 exports.registerUser = async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const username = String((req.body && req.body.username) || '').trim();
+    const email = normalizeEmail(req.body && req.body.email);
+    const { password } = req.body;
 
-    const userExists = await User.findOne({ $or: [{ email }, { username }] });
+    const userExists = get(
+      'SELECT "_id" FROM "users" WHERE "email" = ? OR "username" = ?',
+      [email, username],
+    );
     if (userExists) {
       return res.status(400).json({ message: 'User already exists with this email or username' });
     }
 
-    const user = await User.create({ username, email, password });
+    const user = insert('users', {
+      username,
+      email,
+      password: await hashPassword(password),
+    });
 
     res.status(201).json({
       _id: user._id,
@@ -106,22 +128,25 @@ exports.registerUser = async (req, res) => {
 
 exports.loginUser = async (req, res) => {
   try {
-    const { email, password, profile } = req.body;
+    const { password, profile } = req.body;
+    const email = normalizeEmail(req.body && req.body.email);
 
     let user = null;
     if (profile) {
       const definition = profileByKey(profile);
       // Seeded profiles resolve through config (legacy emails and all);
       // created ones sign in with their username as the picker key.
-      user = definition ? await findProfileUser(definition) : await User.findOne({ username: profile });
+      user = definition
+        ? findProfileUser(definition)
+        : findOne('users', { username: String(profile).trim() });
       if (!user) {
         return res.status(400).json({ message: 'Unknown profile' });
       }
     } else {
-      user = await User.findOne({ email });
+      user = findOne('users', { email });
     }
 
-    if (!user || !(await user.comparePassword(password))) {
+    if (!user || !(await comparePassword(password, user.password))) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
@@ -142,19 +167,23 @@ exports.updateMe = async (req, res) => {
       return res.status(403).json({ message: 'Guests cannot edit the profile' });
     }
     const { avatar } = req.body;
-    const user = await User.findById(req.user._id);
 
     if (avatar !== undefined) {
-      if (avatar === null || avatar === '') {
-        user.avatar = '';
-      } else if (typeof avatar === 'string' && avatar.startsWith('data:image/') && avatar.length <= 2000000) {
-        user.avatar = avatar;
-      } else {
+      if (!(avatar === null || avatar === ''
+        || (typeof avatar === 'string' && avatar.startsWith('data:image/') && avatar.length <= 2000000))) {
         return res.status(400).json({ message: 'Avatar must be an image data URL under 2MB' });
       }
     }
 
-    await user.save();
+    const patch = {};
+    if (avatar !== undefined) {
+      patch.avatar = avatar === null || avatar === '' ? '' : avatar;
+    }
+
+    const user = updateById('users', req.user._id, patch);
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
     res.json(publicUser(user));
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -171,5 +200,6 @@ exports.getMe = async (req, res) => {
       allowedPages: req.guest.allowedPages,
     });
   }
+  // req.user already arrived without the password column (see middleware/auth).
   res.json(req.user);
 };

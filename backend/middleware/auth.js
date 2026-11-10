@@ -1,8 +1,16 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const GuestSession = require('../models/GuestSession');
+const { findById } = require('../db/helpers');
 const { pageKeyForUrl } = require('../config/pages');
 const { purgeGuestData } = require('../utils/purgeGuestSession');
+const { isSessionLive } = require('../utils/sessionLive');
+
+// The token's user row without password material — mongoose used to strip it
+// with .select('-password'); every consumer (getMe included) expects that.
+const safeUser = (user) => {
+  if (!user) return null;
+  const { password, ...rest } = user;
+  return rest;
+};
 
 const protect = async (req, res, next) => {
   let token;
@@ -15,14 +23,14 @@ const protect = async (req, res, next) => {
       // Guests resolve to the owner account for auth, but every query is
       // scoped to their own temporary partition (guestSession).
       if (decoded.guest) {
-        const session = await GuestSession.findById(decoded.sessionId);
-        if (!session || !session.isLive()) {
+        const session = findById('guest_sessions', decoded.sessionId);
+        if (!isSessionLive(session)) {
           // Lazy cleanup: the session died (expired/revoked) — wipe its data.
           if (decoded.sessionId) purgeGuestData(decoded.sessionId).catch(() => {});
           return res.status(401).json({ message: 'This access link has expired or was ended' });
         }
 
-        const user = await User.findById(decoded.id).select('-password');
+        const user = safeUser(findById('users', decoded.id));
         if (!user) {
           return res.status(401).json({ message: 'User not found' });
         }
@@ -50,7 +58,7 @@ const protect = async (req, res, next) => {
         return next();
       }
 
-      const user = await User.findById(decoded.id).select('-password');
+      const user = safeUser(findById('users', decoded.id));
       if (!user) {
         return res.status(401).json({ message: 'User not found' });
       }
@@ -64,8 +72,8 @@ const protect = async (req, res, next) => {
       try {
         const expired = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
         if (expired.guest && expired.sessionId) {
-          const session = await GuestSession.findById(expired.sessionId);
-          if (!session || !session.isLive()) {
+          const session = findById('guest_sessions', expired.sessionId);
+          if (!isSessionLive(session)) {
             purgeGuestData(expired.sessionId).catch(() => {});
           }
         }
