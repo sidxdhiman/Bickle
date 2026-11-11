@@ -2,10 +2,12 @@
    data across modules, cross-profile reads/writes are rejected, the public
    showcase publishes only the showcase profile's art, chat is exchanged
    between the profiles and blocked for guests. Run with `npm test`. */
-const { MongoMemoryServer } = require('mongodb-memory-server');
 const { spawn } = require('child_process');
-const mongoose = require('mongoose');
-const { Message } = require('./models/Chat');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { openDatabase, closeDatabase } = require('./db');
+const { updateById } = require('./db/helpers');
 
 const BASE = 'http://127.0.0.1:5097/api';
 const SEED_PASSWORD = process.env.SEED_PASSWORD || '0]Hyisgh';
@@ -31,14 +33,12 @@ const check = (cond, msg, extra) => {
 };
 
 (async () => {
-  const mongod = await MongoMemoryServer.create();
-  const uri = mongod.getUri();
-  // The test process shares the memory database so it can backdate expiry
-  // fields and assert the server's purge behaviour.
-  await mongoose.connect(uri);
+  // Shared SQLite file: this process opens the same file (WAL) so it can
+  // backdate expiry fields and assert the server's purge behaviour.
+  const dbPath = path.join(os.tmpdir(), `bickle-test-users-${process.pid}.db`);
   const server = spawn('node', ['server.js'], {
     cwd: __dirname,
-    env: { ...process.env, MONGODB_URI: uri, PORT: '5097', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
+    env: { ...process.env, SQLITE_PATH: dbPath, PORT: '5097', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -51,6 +51,8 @@ const check = (cond, msg, extra) => {
       });
       server.stderr.on('data', (d) => process.stderr.write(`[srv-err] ${d}`));
     });
+
+    openDatabase(dbPath);
 
     // --- Profile picker + logins ---
     const profiles = await api('GET', '/auth/profiles');
@@ -201,7 +203,7 @@ const check = (cond, msg, extra) => {
     );
 
     // ...and vanish from reads once it passes (backdate to simulate the wait).
-    await Message.updateOne({ _id: timed.data._id }, { expiresAt: new Date(Date.now() - 1000) });
+    updateById('messages', timed.data._id, { expiresAt: new Date(Date.now() - 1000) });
     const afterPurge = await api('GET', `/chat/${convId}/messages`, { token: meToken });
     check(
       afterPurge.data.every((m) => m.text !== 'expires soon'),
@@ -431,8 +433,18 @@ const check = (cond, msg, extra) => {
     console.error('ERROR:', error);
   } finally {
     server.kill();
-    await mongoose.disconnect();
-    await mongod.stop();
+    await new Promise((resolve) => {
+      server.once('exit', resolve);
+      setTimeout(resolve, 3000);
+    });
+    closeDatabase();
+    for (const suffix of ['', '-wal', '-shm']) {
+      try {
+        fs.rmSync(dbPath + suffix);
+      } catch (error) {
+        // Already gone.
+      }
+    }
   }
 
   console.log(failures === 0 ? 'ALL TWO-PROFILE TESTS PASSED' : `${failures} TEST(S) FAILED`);

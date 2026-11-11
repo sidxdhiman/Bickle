@@ -1,9 +1,12 @@
 /* Per-guest-session data isolation tests: empty reads for guests, partitioned
    writes, cross-partition delete protection, body-sanitization against
    repartitioning attacks, and purge on session end. Run with `npm test`. */
-const { MongoMemoryServer } = require('mongodb-memory-server');
 const { spawn } = require('child_process');
-const mongoose = require('mongoose');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { openDatabase, closeDatabase } = require('./db');
+const { get } = require('./db/helpers');
 
 const BASE = 'http://127.0.0.1:5099/api';
 
@@ -32,12 +35,12 @@ const check = (cond, msg, extra) => {
 };
 
 (async () => {
-  const mongod = await MongoMemoryServer.create();
-  const uri = mongod.getUri();
-
+  // Shared SQLite file: the server owns the writes, this process opens the
+  // same file (WAL) for direct row assertions after the HTTP flows.
+  const dbPath = path.join(os.tmpdir(), `bickle-test-isolation-${process.pid}.db`);
   const server = spawn('node', ['server.js'], {
     cwd: __dirname,
-    env: { ...process.env, MONGODB_URI: uri, PORT: '5099', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
+    env: { ...process.env, SQLITE_PATH: dbPath, PORT: '5099', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -50,6 +53,8 @@ const check = (cond, msg, extra) => {
       });
       server.stderr.on('data', (d) => process.stderr.write(`[srv-err] ${d}`));
     });
+
+    openDatabase(dbPath);
 
     // --- Setup: owner with one note ---
     const reg = await api('POST', '/auth/register', { body: { username: 'owner', email: 'owner@test.dev', password: 'secret123' } });
@@ -113,22 +118,29 @@ const check = (cond, msg, extra) => {
     const after = await api('GET', '/notes', { token: guestToken });
     check(after.status === 401, 'expired guest token rejected after end', after.data);
 
-    await mongoose.connect(uri);
-    const Note = require('./models/Note');
-    const Category = require('./models/Category');
-    const guestNotes = await Note.countDocuments({ guestSession: { $ne: null } });
-    const guestCats = await Category.countDocuments({ guestSession: { $ne: null } });
-    const ownerNotes = await Note.countDocuments({ guestSession: null });
+    const guestNotes = get('SELECT COUNT(*) AS c FROM "notes" WHERE "guestSession" IS NOT NULL').c;
+    const guestCats = get('SELECT COUNT(*) AS c FROM "categories" WHERE "guestSession" IS NOT NULL').c;
+    const ownerNotes = get('SELECT COUNT(*) AS c FROM "notes" WHERE "guestSession" IS NULL').c;
     check(guestNotes === 0, `guest notes PURGED on session end (found ${guestNotes})`);
     check(guestCats === 0, `guest categories PURGED on session end (found ${guestCats})`);
     check(ownerNotes === 1, `owner notes intact after purge (found ${ownerNotes})`);
-    await mongoose.disconnect();
   } catch (error) {
     failures += 1;
     console.error('ERROR:', error);
   } finally {
     server.kill();
-    await mongod.stop();
+    await new Promise((resolve) => {
+      server.once('exit', resolve);
+      setTimeout(resolve, 3000);
+    });
+    closeDatabase();
+    for (const suffix of ['', '-wal', '-shm']) {
+      try {
+        fs.rmSync(dbPath + suffix);
+      } catch (error) {
+        // Already gone.
+      }
+    }
   }
 
   console.log(failures === 0 ? 'ALL ISOLATION TESTS PASSED' : `${failures} TEST(S) FAILED`);

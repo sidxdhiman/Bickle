@@ -1,9 +1,12 @@
 /* Scoping + owner CRUD regression across all modules: owner flows unchanged,
    guest reads empty per module, guest writes isolated, purge on revoke.
    Run with `npm test`. */
-const { MongoMemoryServer } = require('mongodb-memory-server');
 const { spawn } = require('child_process');
-const mongoose = require('mongoose');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { openDatabase, closeDatabase } = require('./db');
+const { get } = require('./db/helpers');
 
 const BASE = 'http://127.0.0.1:5098/api';
 
@@ -30,11 +33,12 @@ const check = (cond, msg, extra) => {
 const ALL_PAGES = ['tasks', 'habits', 'focus', 'calendar', 'notes', 'whiteboard', 'pdf-editor', 'sleep', 'money', 'translator', 'art'];
 
 (async () => {
-  const mongod = await MongoMemoryServer.create();
-  const uri = mongod.getUri();
+  // Shared SQLite file: server writes, this process reads the same file (WAL)
+  // for purge/partition assertions after the HTTP flows.
+  const dbPath = path.join(os.tmpdir(), `bickle-test-modules-${process.pid}.db`);
   const server = spawn('node', ['server.js'], {
     cwd: __dirname,
-    env: { ...process.env, MONGODB_URI: uri, PORT: '5098', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
+    env: { ...process.env, SQLITE_PATH: dbPath, PORT: '5098', JWT_SECRET: 'test-secret', NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
@@ -46,6 +50,8 @@ const ALL_PAGES = ['tasks', 'habits', 'focus', 'calendar', 'notes', 'whiteboard'
       });
       server.stderr.on('data', (d) => process.stderr.write(`[srv-err] ${d}`));
     });
+
+    openDatabase(dbPath);
 
     const reg = await api('POST', '/auth/register', { body: { username: 'owner', email: 'owner@test.dev', password: 'secret123' } });
     const ownerToken = reg.data.token;
@@ -151,24 +157,30 @@ const ALL_PAGES = ['tasks', 'habits', 'focus', 'calendar', 'notes', 'whiteboard'
     const dead = await api('GET', '/tasks', { token: guestToken });
     check(dead.status === 401, 'guest token rejected after revoke', dead.data);
 
-    await mongoose.connect(uri);
-    const Task = require('./models/Task');
-    const Habit = require('./models/Habit');
-    const UserCategory = require('./models/UserCategory');
-    const guestTasks = await Task.countDocuments({ guestSession: { $ne: null } });
-    const guestHabits = await Habit.countDocuments({ guestSession: { $ne: null } });
-    const guestCats = await UserCategory.countDocuments({ guestSession: { $ne: null } });
-    const ownerTasks = await Task.countDocuments({ guestSession: null });
-    const ownerHabits = await Habit.countDocuments({ guestSession: null });
+    const guestTasks = get('SELECT COUNT(*) AS c FROM "tasks" WHERE "guestSession" IS NOT NULL').c;
+    const guestHabits = get('SELECT COUNT(*) AS c FROM "habits" WHERE "guestSession" IS NOT NULL').c;
+    const guestCats = get('SELECT COUNT(*) AS c FROM "user_categories" WHERE "guestSession" IS NOT NULL').c;
+    const ownerTasks = get('SELECT COUNT(*) AS c FROM "tasks" WHERE "guestSession" IS NULL').c;
+    const ownerHabits = get('SELECT COUNT(*) AS c FROM "habits" WHERE "guestSession" IS NULL').c;
     check(guestTasks === 0 && guestHabits === 0 && guestCats === 0, `guest data PURGED on revoke (tasks=${guestTasks}, habits=${guestHabits}, cats=${guestCats})`);
     check(ownerTasks === 1 && ownerHabits === 1, `owner data intact after revoke (tasks=${ownerTasks}, habits=${ownerHabits})`);
-    await mongoose.disconnect();
   } catch (error) {
     failures += 1;
     console.error('ERROR:', error);
   } finally {
     server.kill();
-    await mongod.stop();
+    await new Promise((resolve) => {
+      server.once('exit', resolve);
+      setTimeout(resolve, 3000);
+    });
+    closeDatabase();
+    for (const suffix of ['', '-wal', '-shm']) {
+      try {
+        fs.rmSync(dbPath + suffix);
+      } catch (error) {
+        // Already gone.
+      }
+    }
   }
 
   console.log(failures === 0 ? 'ALL MODULE TESTS PASSED' : `${failures} TEST(S) FAILED`);
