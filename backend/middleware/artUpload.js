@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const { getUploadRoot } = require('../config/storage');
 
-const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads', 'art');
+const artUploadRoot = () => path.join(getUploadRoot(), 'art');
 
 const KINDS = {
   images: {
@@ -32,7 +33,7 @@ const makeUpload = (kind) => {
       // Route failures through cb — a synchronous throw here would escape
       // multer and crash the process instead of failing the request.
       try {
-        const dir = path.join(UPLOAD_ROOT, config.dir);
+        const dir = path.join(artUploadRoot(), config.dir);
         fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
       } catch (error) {
@@ -61,4 +62,4 @@ const makeUpload = (kind) => {
   });
 };
 
-module.exports = { makeUpload, UPLOAD_ROOT };
+module.exports = { makeUpload, artUploadRoot };

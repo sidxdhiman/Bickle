@@ -1,0 +1,21 @@
+{
+  "name": "bickle",
+  "productName": "Bickle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bickle desktop app — local-first notes, tasks, habits, chat and more, running on SQLite",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "backend": "npm --prefix backend start",
+    "frontend": "npm --prefix frontend run dev",
+    "test": "npm --prefix backend test",
+    "db:check": "npm --prefix backend run db:check",
+    "smoke": "npm --prefix backend run smoke"
+  },
+  "devDependencies": {
+    "electron": "^45.3.0"
+  }
+}

@@ -1,8 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const { getUploadRoot } = require('../config/storage');
 
-const CHAT_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'chat');
+const chatUploadDir = () => path.join(getUploadRoot(), 'chat');
 
 // Chat accepts essentially anything people share in messages — images, video,
 // audio, documents and archives — with two hard rules: a25MB cap, and no
@@ -46,8 +47,9 @@ const storage = multer.diskStorage({
     // escapes Express and takes the whole process down. Route it through cb
     // so the request fails with a normal error response instead.
     try {
-      fs.mkdirSync(CHAT_UPLOAD_DIR, { recursive: true });
-      cb(null, CHAT_UPLOAD_DIR);
+      const dir = chatUploadDir();
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
     } catch (error) {
       cb(error);
     }
@@ -80,4 +82,4 @@ const upload = multer({
   },
 });
 
-module.exports = { upload, kindOf, CHAT_UPLOAD_DIR, MAX_SIZE };
+module.exports = { upload, kindOf, chatUploadDir, MAX_SIZE };

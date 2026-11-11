@@ -1,6 +1,7 @@
 const fs = require('fs/promises');
 const path = require('path');
 const { query, all, deleteWhere, tx, nowIso } = require('../db/helpers');
+const { getUploadRoot } = require('../config/storage');
 
 // The 14 partitioned tables — guest data lives in rows whose guestSession
 // column matches the session id. Mirrors the old MODELS list exactly.
@@ -10,14 +11,14 @@ const PARTITIONED_TABLES = [
   'art_blogs', 'art_photos', 'art_videos', 'art_music',
 ];
 
-const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads', 'art');
 const PUBLIC_PREFIX = '/uploads/art/';
 
 const removeFile = async (publicPath) => {
   if (typeof publicPath !== 'string' || !publicPath.startsWith(PUBLIC_PREFIX)) return;
+  const root = path.resolve(path.join(getUploadRoot(), 'art'));
   const relative = publicPath.slice(PUBLIC_PREFIX.length);
-  const target = path.resolve(UPLOAD_ROOT, relative);
-  if (!target.startsWith(path.resolve(UPLOAD_ROOT) + path.sep)) return;
+  const target = path.resolve(root, relative);
+  if (!target.startsWith(root + path.sep)) return;
   try {
     await fs.unlink(target);
   } catch (error) {

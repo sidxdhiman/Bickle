@@ -10,31 +10,69 @@ if (!process.env.JWT_SECRET) {
 }
 
 const { openDatabase, closeDatabase } = require('./db');
+const { setUploadRoot, getUploadRoot } = require('./config/storage');
 
 const app = express();
+
+// Dist hosting state — startServer({ serveDist, distDir }) flips these before
+// the listener opens; the request-time guards below keep registration at
+// module load (so the error handler stays last).
+const dist = {
+  enabled: process.env.SERVE_DIST === '1',
+  dir: path.join(__dirname, '..', 'frontend', 'dist'),
+};
 
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '3mb' }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
-app.use('/api/auth', require('./routes/authRoutes'));
-app.use('/api/chat', require('./routes/chatRoutes'));
-app.use('/api/lists', require('./routes/listRoutes'));
-app.use('/api/tasks', require('./routes/taskRoutes'));
-app.use('/api/guest', require('./routes/guestRoutes'));
-app.use('/api/calendar', require('./routes/calendarRoutes'));
-app.use('/api/notes', require('./routes/noteRoutes'));
-app.use('/api/sleep', require('./routes/sleepRoutes'));
-app.use('/api/money', require('./routes/moneyRoutes'));
-app.use('/api/settings', require('./routes/settingsRoutes'));
-app.use('/api/habits', require('./routes/habitRoutes'));
-app.use('/api/whiteboards', require('./routes/whiteboardRoutes'));
-app.use('/api/art', require('./routes/artRoutes'));
+// Uploads at both roots: stored paths are /uploads/... and the frontend
+// prefixes its API origin (/bickle) onto them, so /bickle/uploads must answer
+// too (the dev proxy rewrites the same way).
+const uploadsStatic = (req, res, next) =>
+  express.static(getUploadRoot())(req, res, next);
+app.use('/uploads', uploadsStatic);
+app.use('/bickle/uploads', uploadsStatic);
+
+// Routes — mounted under /api (dev/proxy contract) and /bickle/api (the
+// axios baseURL baked into the built frontend). Same router instances.
+const routeTables = [
+  ['auth', require('./routes/authRoutes')],
+  ['chat', require('./routes/chatRoutes')],
+  ['lists', require('./routes/listRoutes')],
+  ['tasks', require('./routes/taskRoutes')],
+  ['guest', require('./routes/guestRoutes')],
+  ['calendar', require('./routes/calendarRoutes')],
+  ['notes', require('./routes/noteRoutes')],
+  ['sleep', require('./routes/sleepRoutes')],
+  ['money', require('./routes/moneyRoutes')],
+  ['settings', require('./routes/settingsRoutes')],
+  ['habits', require('./routes/habitRoutes')],
+  ['whiteboards', require('./routes/whiteboardRoutes')],
+  ['art', require('./routes/artRoutes')],
+];
+for (const prefix of ['/api', '/bickle/api']) {
+  for (const [name, router] of routeTables) {
+    app.use(`${prefix}/${name}`, router);
+  }
+}
 
 app.get('/', (req, res) => {
+  if (dist.enabled) return res.redirect('/bickle/');
   res.send('Bickle API is running...');
+});
+
+// Built frontend under /bickle (BrowserRouter basename). Registered before
+// the error handler so sendFile failures route into it.
+app.use('/bickle', (req, res, next) => {
+  if (!dist.enabled) return next();
+  express.static(dist.dir)(req, res, next);
+});
+app.get('/bickle/*', (req, res, next) => {
+  if (!dist.enabled || req.path.startsWith('/bickle/api/')) return next();
+  res.sendFile(path.join(dist.dir, 'index.html'), (error) => {
+    if (error) next(error);
+  });
 });
 
 app.use((err, req, res, next) => {
@@ -74,6 +112,10 @@ const startServer = async (options = {}) => {
     || process.env.SQLITE_PATH
     || path.join(__dirname, 'data', 'bickle.db');
   const port = options.port !== undefined ? options.port : Number(process.env.PORT) || 9000;
+  const uploadDir = options.uploadDir || process.env.UPLOAD_DIR;
+  if (uploadDir) setUploadRoot(uploadDir);
+  if (options.serveDist !== undefined) dist.enabled = Boolean(options.serveDist);
+  if (options.distDir) dist.dir = options.distDir;
 
   openDatabase(sqlitePath);
   await cleanupPartitions();
