@@ -139,13 +139,13 @@ try {
 
   // 7. NULL json column is omitted on read (mongoose absent-path parity).
   const message = insert('messages', {
-    conversationId: 'conv-1',
+    conversation: 'conv-1',
     sender: user._id,
     text: 'hello',
   });
   check('unset attachment key omitted from doc', !('attachment' in message), JSON.stringify(message.attachment));
   const withAttachment = insert('messages', {
-    conversationId: 'conv-1',
+    conversation: 'conv-1',
     sender: user._id,
     attachment: { url: '/uploads/chat/x.png', name: 'x.png', kind: 'image', size: 10, mime: 'image/png' },
   });

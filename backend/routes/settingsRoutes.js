@@ -1,12 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
-const User = require('../models/User');
-const Task = require('../models/Task');
-const TaskList = require('../models/TaskList');
-const Note = require('../models/Note');
-const CalendarEvent = require('../models/CalendarEvent');
-const Sleep = require('../models/Sleep');
+const { deleteWhere, tx } = require('../db/helpers');
 
 // Delete all user data (owner only — never reachable by a guest session)
 const deleteAllData = async (req, res) => {
@@ -16,20 +11,24 @@ const deleteAllData = async (req, res) => {
     }
     const userId = req.dataScope.user;
 
-    // Delete all tasks
-    await Task.deleteMany({ user: userId });
+    // One transaction: a partial wipe would leave the app in a half-reset
+    // state (the Mongo original was five non-atomic deleteManys).
+    tx(() => {
+      // Delete all tasks
+      deleteWhere('tasks', { user: userId });
 
-    // Delete all task lists
-    await TaskList.deleteMany({ user: userId });
+      // Delete all task lists
+      deleteWhere('task_lists', { user: userId });
 
-    // Delete all notes
-    await Note.deleteMany({ user: userId });
+      // Delete all notes
+      deleteWhere('notes', { user: userId });
 
-    // Delete all calendar events
-    await CalendarEvent.deleteMany({ user: userId });
+      // Delete all calendar events
+      deleteWhere('calendar_events', { user: userId });
 
-    // Delete all sleep records
-    await Sleep.deleteMany({ user: userId });
+      // Delete all sleep records
+      deleteWhere('sleeps', { user: userId });
+    });
 
     res.status(200).json({ message: 'All data deleted successfully' });
   } catch (error) {

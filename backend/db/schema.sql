@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS "idx_conv_participants_user"
 
 CREATE TABLE IF NOT EXISTS "messages" (
   "_id"            TEXT PRIMARY KEY,
-  "conversationId" TEXT NOT NULL,
+  "conversation"   TEXT NOT NULL,
   "sender"         TEXT NOT NULL,
   "type"           TEXT NOT NULL DEFAULT 'text' CHECK ("type" IN ('text','system')),
   "text"           TEXT NOT NULL DEFAULT '' CHECK (length("text") <= 4000),
@@ -73,9 +73,9 @@ CREATE TABLE IF NOT EXISTS "messages" (
   "updatedAt"      TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS "idx_messages_conversation_created"
-  ON "messages"("conversationId", "createdAt");
+  ON "messages"("conversation", "createdAt");
 CREATE INDEX IF NOT EXISTS "idx_messages_conversation_expires"
-  ON "messages"("conversationId", "expiresAt");
+  ON "messages"("conversation", "expiresAt");
 
 CREATE TABLE IF NOT EXISTS "message_read_by" (
   "messageId" TEXT NOT NULL,

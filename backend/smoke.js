@@ -5,6 +5,7 @@
 //   npm run smoke        → exit 0 only when every check passes
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'smoke-secret';
+process.env.SEED_PASSWORD = process.env.SEED_PASSWORD || '0]Hyisgh';
 
 const fs = require('fs');
 const os = require('os');
@@ -40,6 +41,22 @@ async function main() {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    let data = null;
+    try {
+      data = await res.json();
+    } catch (error) {
+      // Non-JSON response — leave data null.
+    }
+    return { status: res.status, data };
+  };
+
+  // Multipart uploads (art) — no JSON content-type, FormData sets its own.
+  const upload = async (url, form, token) => {
+    const res = await fetch(`${base}${url}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
     });
     let data = null;
     try {
@@ -588,6 +605,353 @@ async function main() {
     const ownerStillHasTask = await api('GET', `/tasks?listId=${inbox._id}`, { token: ownerToken });
     check("owner's task survived other user's delete attempt",
       ownerStillHasTask.status === 200 && ownerStillHasTask.data.length === 1, ownerStillHasTask.data);
+
+    // ------------------------------------------------------------- chat --
+    console.log('\nchat');
+    const meLogin = await api('POST', '/auth/login', {
+      body: { profile: 'me', password: process.env.SEED_PASSWORD },
+    });
+    const dLogin = await api('POST', '/auth/login', {
+      body: { profile: 'd', password: process.env.SEED_PASSWORD },
+    });
+    check('seeded profiles can log in for chat',
+      meLogin.status === 200 && !!meLogin.data.token
+        && dLogin.status === 200 && !!dLogin.data.token,
+      { me: meLogin.status, d: dLogin.status });
+    const meTok = meLogin.data.token;
+    const dTok = dLogin.data.token;
+
+    const convsMe = await api('GET', '/chat', { token: meTok });
+    check('chat list lazily creates the peer conversation',
+      convsMe.status === 200 && convsMe.data.length === 1
+        && convsMe.data[0].peer.username === 'D'
+        && convsMe.data[0].unreadCount === 0
+        && convsMe.data[0].lastMessage === null,
+      convsMe.data);
+    const convId = convsMe.data[0]._id;
+
+    const convsD = await api('GET', '/chat', { token: dTok });
+    check("D's side lists Sidharth with the same conversation id",
+      convsD.status === 200 && convsD.data.length === 1
+        && convsD.data[0].peer.username === 'Sidharth'
+        && convsD.data[0]._id === convId,
+      convsD.data);
+
+    const msgFromD = await api('POST', `/chat/${convId}/messages`, {
+      token: dTok, body: { text: 'hello from D' },
+    });
+    check('send message hydrates readBy for the sender',
+      msgFromD.status === 201 && msgFromD.data.text === 'hello from D'
+        && Array.isArray(msgFromD.data.readBy) && msgFromD.data.readBy.length === 1,
+      msgFromD.data);
+
+    const longMsg = await api('POST', `/chat/${convId}/messages`, {
+      token: dTok, body: { text: 'x'.repeat(4001) },
+    });
+    check('over-long message rejected → 400', longMsg.status === 400, longMsg);
+    const emptyMsg = await api('POST', `/chat/${convId}/messages`, {
+      token: dTok, body: { text: '   ' },
+    });
+    check('empty message rejected → 400', emptyMsg.status === 400, emptyMsg);
+
+    const unreadMe = await api('GET', '/chat/unread-count', { token: meTok });
+    check('unread count + latest preview for the receiver',
+      unreadMe.status === 200 && unreadMe.data.count === 1
+        && unreadMe.data.latest.sender === 'D'
+        && unreadMe.data.latest.preview === 'hello from D'
+        && unreadMe.data.latest.conversation === convId,
+      unreadMe.data);
+
+    const threadForMe = await api('GET', `/chat/${convId}/messages`, { token: meTok });
+    check('get messages hydrates readBy from the junction table',
+      threadForMe.status === 200 && threadForMe.data.length === 1
+        && threadForMe.data[0].readBy.length === 1
+        && threadForMe.data[0].readBy[0] === dLogin.data._id,
+      threadForMe.data);
+
+    const readRes = await api('POST', `/chat/${convId}/read`, { token: meTok });
+    check('mark read', readRes.status === 200 && readRes.data.ok === true, readRes.data);
+    const unreadAfter = await api('GET', '/chat/unread-count', { token: meTok });
+    check('unread cleared after mark read',
+      unreadAfter.status === 200 && unreadAfter.data.count === 0, unreadAfter.data);
+
+    const msgFromMe = await api('POST', `/chat/${convId}/messages`, {
+      token: meTok, body: { text: 'hi from me' },
+    });
+    check('send from me', msgFromMe.status === 201, msgFromMe.data);
+    const unreadD2 = await api('GET', '/chat/unread-count', { token: dTok });
+    check('D sees one unread', unreadD2.status === 200 && unreadD2.data.count === 1, unreadD2.data);
+
+    const set1h = await api('PUT', `/chat/${convId}/settings`, {
+      token: meTok, body: { mode: '1h' },
+    });
+    check('set 1h posts the system message with readBy',
+      set1h.status === 200 && set1h.data.mode === '1h'
+        && set1h.data.message.type === 'system'
+        && set1h.data.message.text === 'Sidharth changed the settings to 1 hour'
+        && set1h.data.message.readBy.length === 1,
+      set1h.data);
+
+    const after1h = await api('GET', `/chat/${convId}/messages`, { token: meTok });
+    check('history re-stamped with timed expiry',
+      after1h.status === 200 && after1h.data.length === 3
+        && after1h.data.every((m) => m.disappear === '1h' && typeof m.expiresAt === 'string'),
+      after1h.data && after1h.data.map((m) => [m.type, m.disappear]));
+
+    const badMode = await api('PUT', `/chat/${convId}/settings`, {
+      token: meTok, body: { mode: 'forever' },
+    });
+    check('invalid disappear mode → 400', badMode.status === 400, badMode);
+
+    const setViewed = await api('PUT', `/chat/${convId}/settings`, {
+      token: meTok, body: { mode: 'viewed' },
+    });
+    check('set viewed mode', setViewed.status === 200 && setViewed.data.mode === 'viewed',
+      setViewed.data);
+
+    const afterViewed = await api('GET', `/chat/${convId}/messages`, { token: meTok });
+    // hello was read by both → deleted on the switch; hi + the 1h system
+    // message survive as viewed; a fresh viewed system message lands too.
+    check('read-by-everyone message deleted on viewed switch',
+      afterViewed.status === 200 && afterViewed.data.length === 3
+        && afterViewed.data.every((m) => m.disappear === 'viewed' && m.viewedAt === null)
+        && !afterViewed.data.some((m) => m.text === 'hello from D')
+        && afterViewed.data.some((m) => m.text === 'hi from me'),
+      afterViewed.data && afterViewed.data.map((m) => m.text));
+
+    await api('POST', `/chat/${convId}/read`, { token: dTok });
+    const leaveD = await api('POST', `/chat/${convId}/leave`, { token: dTok });
+    check('leave conversation', leaveD.status === 200 && leaveD.data.ok === true, leaveD.data);
+    const emptyThread = await api('GET', `/chat/${convId}/messages`, { token: meTok });
+    check('viewed messages deleted once their reader leaves',
+      emptyThread.status === 200 && emptyThread.data.length === 0, emptyThread.data);
+    const convsAfter = await api('GET', '/chat', { token: meTok });
+    check('preview resets when the thread empties',
+      convsAfter.status === 200 && convsAfter.data[0].lastMessage === null
+        && convsAfter.data[0].unreadCount === 0,
+      convsAfter.data);
+
+    await api('POST', `/chat/${convId}/messages`, { token: meTok, body: { text: 'temp' } });
+    const cleared = await api('POST', `/chat/${convId}/clear`, { token: meTok });
+    check('clear messages', cleared.status === 200 && cleared.data.deleted === 1, cleared.data);
+
+    const intruder = await api('GET', `/chat/${convId}/messages`, { token: otherToken });
+    check("non-participant gets 404 on someone else's thread", intruder.status === 404, intruder);
+
+    const missingConv = await api('GET', '/chat/does-not-exist/messages', { token: meTok });
+    check('missing conversation → 404', missingConv.status === 404, missingConv);
+
+    // ----------------------------------------------------------- guest --
+    console.log('\nguest');
+    const shareNote = (await api('POST', '/notes', {
+      token: ownerToken, body: { title: 'Share me', content: 'guest content' },
+    })).data;
+    const shareList = (await api('POST', '/lists', {
+      token: ownerToken, body: { name: 'Share list' },
+    })).data;
+    const shareTask = (await api('POST', '/tasks', {
+      token: ownerToken, body: { list: shareList._id, title: 'Share task' },
+    })).data;
+
+    const sessionRes = await api('POST', '/guest', {
+      token: ownerToken,
+      body: {
+        label: '  Tester  ',
+        durationMinutes: 30,
+        allowedPages: ['notes', 'tasks', 'not-a-page'],
+        pageAccess: { notes: 'view', bogus: 'edit' },
+        sharedItems: [
+          { page: 'notes', itemId: shareNote._id, title: 'Share me' },
+          { page: 'tasks', itemId: shareTask._id, title: 'Share task' },
+          { page: 'notes', itemId: shareNote._id, title: 'dup' },
+          { page: 'nope', itemId: 'x' },
+        ],
+      },
+    });
+    check('create guest session sanitizes input',
+      sessionRes.status === 201
+        && sessionRes.data.label === 'Tester'
+        && JSON.stringify(sessionRes.data.allowedPages) === JSON.stringify(['notes', 'tasks'])
+        && sessionRes.data.pageAccess.notes === 'view'
+        && sessionRes.data.pageAccess.bogus === undefined
+        && sessionRes.data.sharedItems.length === 2
+        && sessionRes.data.active === true
+        && typeof sessionRes.data.token === 'string',
+      sessionRes.data);
+    const guestTok = sessionRes.data.token;
+    const guestId = sessionRes.data._id;
+
+    const link = await api('GET', `/guest/session/${guestTok}`);
+    check('public link validation',
+      link.status === 200 && link.data.label === 'Tester'
+        && link.data.sharedItems.length === 2 && link.data.active === true,
+      link.data);
+
+    const guestNotes = await api('GET', '/notes', { token: guestTok });
+    check('guest sees only the cloned note',
+      guestNotes.status === 200 && guestNotes.data.length === 1
+        && guestNotes.data[0]._id !== shareNote._id
+        && guestNotes.data[0].title === 'Share me',
+      guestNotes.data);
+
+    const guestLists = await api('GET', '/lists', { token: guestTok });
+    const guestTasks = await api('GET', '/tasks', { token: guestTok });
+    check('task share clones list + task into the guest partition',
+      guestLists.status === 200 && guestLists.data.length === 1
+        && guestLists.data[0]._id !== shareList._id
+        && guestTasks.status === 200 && guestTasks.data.length === 1
+        && guestTasks.data[0].list === guestLists.data[0]._id
+        && guestTasks.data[0]._id !== shareTask._id,
+      { lists: guestLists.data, tasks: guestTasks.data });
+
+    const ownerListsAfterClone = await api('GET', '/lists', { token: ownerToken });
+    check("clones never land in the owner's partition",
+      ownerListsAfterClone.status === 200
+        && ownerListsAfterClone.data.every((l) => l._id !== guestLists.data[0]._id),
+      ownerListsAfterClone.data.map((l) => l.name));
+
+    const guestSessions = await api('GET', '/guest', { token: ownerToken });
+    check('list guest sessions', guestSessions.status === 200
+      && guestSessions.data.length === 1, guestSessions.data);
+
+    const guestChat = await api('GET', '/chat', { token: guestTok });
+    check('guest cannot reach chat', guestChat.status === 403, guestChat);
+
+    const guestSettings = await api('DELETE', '/settings/delete-all-data', { token: guestTok });
+    check('guest cannot wipe data', guestSettings.status === 403, guestSettings);
+
+    const revoked = await api('DELETE', `/guest/${guestId}`, { token: ownerToken });
+    check('revoke session', revoked.status === 200 && revoked.data.active === false,
+      revoked.data);
+
+    const guestAfterRevoke = await api('GET', '/notes', { token: guestTok });
+    check('revoked guest token rejected', guestAfterRevoke.status === 401, guestAfterRevoke);
+
+    const session2 = await api('POST', '/guest', {
+      token: ownerToken,
+      body: { label: 'Self-end', durationMinutes: 15, allowedPages: ['notes'] },
+    });
+    check('second session', session2.status === 201, session2.data);
+    const ended = await api('POST', `/guest/session/${session2.data.token}/end`);
+    check('guest ends own session',
+      ended.status === 200 && ended.data.message === 'Session ended', ended.data);
+    const linkAfterEnd = await api('GET', `/guest/session/${session2.data.token}`);
+    check('ended link reports 410', linkAfterEnd.status === 410, linkAfterEnd);
+
+    // ------------------------------------------------------------- art --
+    console.log('\nart');
+    const pngBytes = Uint8Array.from(
+      atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='),
+      (c) => c.charCodeAt(0)
+    );
+    const artImagesDir = path.join(__dirname, 'uploads', 'art', 'images');
+
+    const photoForm = new FormData();
+    photoForm.append('file', new File([pngBytes], 'pixel.png', { type: 'image/png' }));
+    photoForm.append('title', 'Pixel');
+    const photoRes = await upload('/art/photos', photoForm, ownerToken);
+    check('upload photo',
+      photoRes.status === 201 && photoRes.data.source === 'upload'
+        && photoRes.data.url.startsWith('/uploads/art/images/'),
+      photoRes.data);
+
+    const photosMine = await api('GET', '/art/photos', { token: ownerToken });
+    check('owner sees own photo', photosMine.status === 200
+      && photosMine.data.length === 1, photosMine.data);
+
+    const photosPublic = await api('GET', '/art/photos');
+    check('anonymous read falls back to showcase',
+      photosPublic.status === 200 && Array.isArray(photosPublic.data)
+        && photosPublic.data.length === 0, photosPublic.data);
+
+    const blogForm = new FormData();
+    blogForm.append('images', new File([pngBytes], 'inline.png', { type: 'image/png' }));
+    blogForm.append('title', 'My first post');
+    blogForm.append('content', 'hello art');
+    blogForm.append('imageMeta', JSON.stringify([{ title: 'Inline', description: 'in blog' }]));
+    const blogRes = await upload('/art/blogs', blogForm, ownerToken);
+    check('create blog with image',
+      blogRes.status === 201 && blogRes.data.images.length === 1
+        && blogRes.data.title === 'My first post',
+      blogRes.data);
+
+    const photosAfterBlog = await api('GET', '/art/photos', { token: ownerToken });
+    check('blog image lands in the gallery',
+      photosAfterBlog.status === 200 && photosAfterBlog.data.length === 2
+        && photosAfterBlog.data.some((p) => p.source === 'blog' && p.blog === blogRes.data._id),
+      photosAfterBlog.data);
+
+    const blogPhoto = photosAfterBlog.data.find((p) => p.source === 'blog');
+    const blogPhotoPath = path.join(artImagesDir, path.basename(blogPhoto.url));
+    const delBlogPhoto = await api('DELETE', `/art/photos/${blogPhoto._id}`, { token: ownerToken });
+    check('delete blog photo', delBlogPhoto.status === 200, delBlogPhoto.data);
+    check('blog photo file removed from disk', !fs.existsSync(blogPhotoPath));
+
+    const blogAfterPull = await api('GET', `/art/blogs/${blogRes.data._id}`, { token: ownerToken });
+    check('blog gallery pulled after photo delete',
+      blogAfterPull.status === 200 && blogAfterPull.data.images.length === 0,
+      blogAfterPull.data);
+
+    const delBlog = await api('DELETE', `/art/blogs/${blogRes.data._id}`, { token: ownerToken });
+    check('delete blog', delBlog.status === 200, delBlog.data);
+    const blogGone = await api('GET', `/art/blogs/${blogRes.data._id}`, { token: ownerToken });
+    check('deleted blog → 404', blogGone.status === 404, blogGone);
+
+    const photosOther = await api('GET', '/art/photos', { token: otherToken });
+    check("other user sees none of owner's art",
+      photosOther.status === 200 && photosOther.data.length === 0, photosOther.data);
+
+    const delPhotoOther = await api('DELETE', `/art/photos/${photoRes.data._id}`, { token: otherToken });
+    check("other user cannot delete owner's photo → 404", delPhotoOther.status === 404, delPhotoOther);
+
+    const delPhoto = await api('DELETE', `/art/photos/${photoRes.data._id}`, { token: ownerToken });
+    check('delete photo removes the file too',
+      delPhoto.status === 200
+        && !fs.existsSync(path.join(artImagesDir, path.basename(photoRes.data.url))),
+      delPhoto.data);
+
+    // --------------------------------------------------------- settings --
+    console.log('\nsettings');
+    await api('POST', '/lists', { token: ownerToken, body: { name: 'Wipe list' } });
+    await api('POST', '/notes', { token: ownerToken, body: { title: 'Wipe note' } });
+    await api('POST', '/calendar', {
+      token: ownerToken,
+      body: {
+        title: 'Wipe event',
+        start: '2026-12-20T10:00:00.000Z',
+        end: '2026-12-20T11:00:00.000Z',
+      },
+    });
+    await api('POST', '/sleep', {
+      token: ownerToken,
+      body: {
+        date: '2026-12-01',
+        sleepStart: '2026-12-01T23:00:00.000Z',
+        sleepEnd: '2026-12-02T07:00:00.000Z',
+        quality: 'good',
+      },
+    });
+
+    const wipe = await api('DELETE', '/settings/delete-all-data', { token: ownerToken });
+    check('delete all data', wipe.status === 200 && wipe.data.message
+      === 'All data deleted successfully', wipe.data);
+
+    const wipedLists = await api('GET', '/lists', { token: ownerToken });
+    const wipedTasks = await api('GET', '/tasks', { token: ownerToken });
+    const wipedNotes = await api('GET', '/notes', { token: ownerToken });
+    const wipedEvents = await api('GET', '/calendar', { token: ownerToken });
+    const wipedSleep = await api('GET', '/sleep', { token: ownerToken });
+    check('wipe clears lists/tasks/notes/calendar/sleep',
+      wipedLists.data.length === 0 && wipedTasks.data.length === 0
+        && wipedNotes.data.length === 0 && wipedEvents.data.length === 0
+        && wipedSleep.data.length === 0,
+      {
+        lists: wipedLists.data.length,
+        tasks: wipedTasks.data.length,
+        notes: wipedNotes.data.length,
+        events: wipedEvents.data.length,
+        sleep: wipedSleep.data.length,
+      });
   } finally {
     server.close();
     closeDatabase();

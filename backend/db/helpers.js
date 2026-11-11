@@ -28,6 +28,7 @@ function encodeValue(value) {
   if (value === null || value === undefined) return value;
   if (value instanceof Date) return value.toISOString();
   if (typeof value === 'boolean') return value ? 1 : 0;
+  if (Buffer.isBuffer(value) || value instanceof Uint8Array) return value;
   if (typeof value === 'object') return JSON.stringify(value);
   return value;
 }
@@ -95,9 +96,12 @@ function buildWhere(where) {
   return { sql: `WHERE ${clauses.join(' AND ')}`, params };
 }
 
+// Bind params are encoded the same way as document fields, so hand-written
+// SQL can pass Date/boolean values directly. Encoding is idempotent for
+// values that buildWhere already converted.
 function run(sql, params = []) {
   try {
-    return getDb().prepare(sql).run(...params);
+    return getDb().prepare(sql).run(...params.map(encodeValue));
   } catch (error) {
     throw translateError(error);
   }
@@ -105,7 +109,7 @@ function run(sql, params = []) {
 
 function get(sql, params = []) {
   try {
-    return getDb().prepare(sql).get(...params);
+    return getDb().prepare(sql).get(...params.map(encodeValue));
   } catch (error) {
     throw translateError(error);
   }
@@ -113,7 +117,7 @@ function get(sql, params = []) {
 
 function all(sql, params = []) {
   try {
-    return getDb().prepare(sql).all(...params);
+    return getDb().prepare(sql).all(...params.map(encodeValue));
   } catch (error) {
     throw translateError(error);
   }
