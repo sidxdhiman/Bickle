@@ -4,3 +4,5 @@ backend/uploads/
 backend/data/
 .env
 backend/.env
+# Installer artifacts (build with npm run dist)
+dist-installers/

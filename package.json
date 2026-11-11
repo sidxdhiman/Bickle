@@ -5,9 +5,11 @@
   "private": true,
   "description": "Bickle desktop app — local-first notes, tasks, habits, chat and more, running on SQLite",
   "main": "electron/main.js",
+  "desktopName": "bickle.desktop",
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "dist": "electron-builder --linux --win",
     "build:frontend": "npm --prefix frontend run build",
     "backend": "npm --prefix backend start",
     "frontend": "npm --prefix frontend run dev",
@@ -16,6 +18,53 @@
     "smoke": "npm --prefix backend run smoke"
   },
   "devDependencies": {
-    "electron": "^45.3.0"
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.bickle.app",
+    "productName": "Bickle",
+    "directories": {
+      "output": "dist-installers",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**/*",
+      "backend/**/*",
+      "!backend/data/**",
+      "!backend/uploads/**",
+      "!backend/*.log",
+      "!backend/test-*.js",
+      "!backend/smoke.js",
+      "!backend/db/roundtrip.js",
+      "frontend/dist/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "npmRebuild": false,
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "maintainer": "Sidharth Dhiman <sidxdhiman@users.noreply.github.com>",
+      "synopsis": "Personal OS — tasks, notes, habits, chat, all local",
+      "syncDesktopName": true
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }
