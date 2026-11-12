@@ -1,7 +1,7 @@
 {
   "name": "bickle",
   "productName": "Bickle",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Bickle desktop app — local-first notes, tasks, habits, chat and more, running on SQLite",
   "main": "electron/main.js",
@@ -43,10 +43,15 @@
       "**/node_modules/better-sqlite3/**"
     ],
     "npmRebuild": false,
+    "publish": {
+      "provider": "github",
+      "owner": "sidxdhiman",
+      "repo": "Bickle"
+    },
     "linux": {
       "target": [
-        "AppImage",
-        "deb"
+        "deb",
+        "AppImage"
       ],
       "icon": "build/icon.png",
       "category": "Utility",
@@ -58,7 +63,8 @@
       "target": [
         "nsis"
       ],
-      "icon": "build/icon.ico"
+      "icon": "build/icon.ico",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -66,5 +72,8 @@
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

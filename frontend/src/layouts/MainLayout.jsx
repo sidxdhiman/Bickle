@@ -5,6 +5,7 @@ import Sidebar from '../components/Sidebar';
 import TopNav from '../components/TopNav';
 import BackgroundLayer from '../components/BackgroundLayer';
 import ChatToast from '../components/ChatToast';
+import UpdateBanner from '../components/UpdateBanner';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useNavMode } from '../hooks/useNavMode';
 import { reindexAll } from '../utils/searchIndex';
@@ -70,6 +71,7 @@ const MainLayout = () => {
       </div>
 
       <ChatToast />
+      <UpdateBanner />
 
       {dockMode && <Dock />}
     </div>

@@ -6,6 +6,7 @@ const { app, BrowserWindow, shell, dialog } = require('electron');
 const path = require('path');
 const { startServer } = require('../backend/server');
 const { closeDatabase } = require('../backend/db');
+const updater = require('./updater');
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -42,6 +43,7 @@ if (!gotLock) {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
+        preload: path.join(__dirname, 'preload.js'),
       },
     });
 
@@ -68,6 +70,7 @@ if (!gotLock) {
     }
 
     mainWindow.loadURL(`http://127.0.0.1:${port}/bickle/`);
+    updater.init(mainWindow);
     return mainWindow;
   };
 
@@ -96,6 +99,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    updater.dispose();
     try {
       if (httpServer) httpServer.close();
     } catch (error) {

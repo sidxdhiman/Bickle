@@ -19,6 +19,7 @@ import {
   Upload,
   SlidersHorizontal,
   Users,
+  RefreshCw,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -27,6 +28,7 @@ import { applyTheme } from '../utils/themeUtils';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useNavMode } from '../hooks/useNavMode';
 import { useBackground } from '../hooks/useBackground';
+import { useAppUpdate, updateStatusText, getDesktopApi } from '../hooks/useAppUpdate';
 import { BACKGROUND_PRESETS, presetToStyle } from '../utils/backgroundPresets';
 import { compressImageFile } from '../utils/colorUtils';
 
@@ -229,6 +231,8 @@ const Settings = () => {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
   const [createdInfo, setCreatedInfo] = useState(null);
+  const update = useAppUpdate();
+  const desktopApi = getDesktopApi();
 
   useEffect(() => {
     axios
@@ -1102,6 +1106,73 @@ const Settings = () => {
           </div>
         )}
       </div>
+
+      {/* Updates */}
+      {update.supported && (
+        <div className="bg-card border border-border rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <RefreshCw className="w-6 h-6 text-primary" />
+            <h2 className="text-xl font-semibold">Updates</h2>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">Bickle for desktop</p>
+              <p className="text-xs text-muted-foreground">
+                Version {update.currentVersion || '…'}
+              </p>
+            </div>
+
+            {update.phase === 'ready' ? (
+              <button
+                onClick={() => desktopApi.installUpdate()}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              >
+                Restart to update
+              </button>
+            ) : update.phase === 'available' && update.canInstall ? (
+              <button
+                disabled
+                className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground opacity-70"
+              >
+                {update.percent != null ? `Downloading… ${update.percent}%` : 'Downloading…'}
+              </button>
+            ) : update.phase === 'available' ? (
+              <button
+                onClick={() => desktopApi.openReleases()}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+              >
+                Download update
+              </button>
+            ) : update.phase === 'checking' ? (
+              <button
+                disabled
+                className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground opacity-70"
+              >
+                Checking…
+              </button>
+            ) : (
+              <button
+                onClick={() => desktopApi.checkForUpdates()}
+                className="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-accent"
+              >
+                Check for updates
+              </button>
+            )}
+          </div>
+
+          <p className="mt-3 text-sm text-muted-foreground">{updateStatusText(update)}</p>
+
+          {update.phase === 'error' && (
+            <button
+              onClick={() => desktopApi.openReleases()}
+              className="mt-2 text-xs font-medium text-primary transition hover:underline"
+            >
+              Open the releases page →
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Danger Zone */}
       <div className="bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-900 rounded-2xl p-6">
