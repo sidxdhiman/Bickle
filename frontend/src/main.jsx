@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import StartupSplash from './components/StartupSplash';
 import { getSavedTheme, applyTheme } from './utils/themeUtils';
 
 const savedTheme = getSavedTheme();
@@ -23,6 +24,7 @@ if (FONT_STACKS[savedFont]) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    <StartupSplash />
     <App />
   </React.StrictMode>
 );
