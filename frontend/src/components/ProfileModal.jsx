@@ -9,6 +9,7 @@ import { GRANTABLE_PAGES } from '../config/pages';
 import { clearSearchIndex } from '../utils/searchIndex';
 import { useCurrentUser, refreshUser } from '../hooks/useCurrentUser';
 import { endActiveProfile } from '../utils/profileState';
+import { useAppUpdate, updateStatusText, getDesktopApi } from '../hooks/useAppUpdate';
 
 function cn(...inputs) {
   return twMerge(clsx(inputs));
@@ -144,6 +145,8 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const currentUser = useCurrentUser();
   const navigate = useNavigate();
   const avatar = currentUser?.avatar || profilePic;
+  const update = useAppUpdate();
+  const desktopApi = getDesktopApi();
 
   // Grant access form
   const [label, setLabel] = useState('');
@@ -471,6 +474,94 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 {savingAvatar ? 'Saving profile picture...' : 'Change profile picture'}
                 <input type="file" accept="image/*" onChange={handleFile} className="hidden" disabled={savingAvatar} />
               </label>
+
+              {update.supported && (
+                <div className="w-full border border-border rounded-lg p-4 bg-secondary/30">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <RefreshCw
+                        className={cn(
+                          'w-4 h-4 shrink-0 text-primary',
+                          (update.phase === 'checking' || update.phase === 'downloading') && 'animate-spin'
+                        )}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          Check for updates
+                          {update.phase === 'uptodate' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-500 font-semibold">
+                              UP TO DATE
+                            </span>
+                          )}
+                          {update.phase === 'available' && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-semibold">
+                              v{update.version} AVAILABLE
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Version {update.currentVersion || '…'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {update.phase === 'ready' ? (
+                      <button
+                        type="button"
+                        onClick={() => desktopApi.installUpdate()}
+                        className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+                      >
+                        Restart to update
+                      </button>
+                    ) : update.phase === 'available' && update.canInstall ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="shrink-0 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground opacity-70"
+                      >
+                        {update.percent != null ? `Downloading… ${update.percent}%` : 'Downloading…'}
+                      </button>
+                    ) : update.phase === 'available' ? (
+                      <button
+                        type="button"
+                        onClick={() => desktopApi.openReleases()}
+                        className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition hover:bg-primary/90"
+                      >
+                        Download update
+                      </button>
+                    ) : update.phase === 'checking' ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="shrink-0 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground opacity-70"
+                      >
+                        Checking…
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => desktopApi.checkForUpdates()}
+                        className="shrink-0 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground transition hover:bg-accent"
+                      >
+                        Check for updates
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="mt-2 text-xs text-muted-foreground">{updateStatusText(update)}</p>
+
+                  {update.phase === 'error' && (
+                    <button
+                      type="button"
+                      onClick={() => desktopApi.openReleases()}
+                      className="mt-1 text-xs font-medium text-primary transition hover:underline"
+                    >
+                      Open the releases page →
+                    </button>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-destructive text-destructive-foreground rounded-lg hover:bg-destructive/90 transition-colors text-sm font-medium"
