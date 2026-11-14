@@ -17,42 +17,35 @@ LINUX_PATH=$(sed -n 's/^path: //p' "$DIR/latest-linux.yml" | head -1)
 BODY=$(cat <<'EOF'
 ## What's new
 
-- **Profile → Check for Updates** — open your profile (avatar in the top bar) and you'll see a new *Check for Updates* section showing the installed version, a status pill (up to date / new version available), and a one-click button to check, download, and install the latest release.
-- Works alongside the existing auto-update flow: AppImage and Windows installs still self-update in the background; the profile section gives you an on-demand check anytime.
+- **Fixed: "Go to Art Site"** — the button on the Art page now actually opens your public Sid-Art showcase in its own window (it was being blocked by the desktop app's window policy, so nothing happened).
+- External links inside that window (contact, LinkedIn, GitHub) still hand off to your system browser, as before.
 
 ## How to install
 
 **Windows**
-1. Download `Bickle-Setup-1.0.3.exe` below.
+1. Download `Bickle-Setup-1.0.4.exe` below.
 2. Run it and follow the installer (you can choose the install folder).
 3. Launch **Bickle** from the Start Menu.
 
 **Linux (AppImage — recommended, self-updating)**
-1. Download `Bickle-1.0.3.AppImage` below.
+1. Download `Bickle-1.0.4.AppImage` below.
 2. Make it executable and run it:
    ```bash
-   chmod +x Bickle-1.0.3.AppImage
-   ./Bickle-1.0.3.AppImage
+   chmod +x Bickle-1.0.4.AppImage
+   ./Bickle-1.0.4.AppImage
    ```
 
 **Linux (`.deb`, Debian/Ubuntu)**
 ```bash
-sudo dpkg -i bickle_1.0.3_amd64.deb
+sudo dpkg -i bickle_1.0.4_amd64.deb
 ```
 
-**Already have Bickle installed?** AppImage and Windows builds update themselves — just restart when the *Update ready* banner appears, or use the new profile check. For `.deb` installs, download the new `.deb` above and reinstall.
+**Already have Bickle installed?** AppImage and Windows builds update themselves — just restart when the *Update ready* banner appears, or use **Profile → Check for Updates**. For `.deb` installs, download the new `.deb` above and reinstall.
 
-## How to use the update checker
+## How to use it
 
-1. Click your **avatar** in the top-right corner to open the profile modal.
-2. Stay on the **Profile** tab — you'll see **Check for Updates** with your current version (e.g. `Version 1.0.3`).
-3. Click **Check for updates**:
-   - If you're current → green **UP TO DATE** pill.
-   - If a new version exists → amber **vX.Y.Z AVAILABLE** pill and a **Download update** button (or automatic background download on AppImage/Windows).
-   - When the download finishes → **Restart to update** installs it and relaunches the app.
-   - If the check fails → an **Open the releases page →** fallback link appears.
-
-You can also find the same controls under **Settings → Updates**.
+1. Open the **Art** page from the sidebar.
+2. Click **Go to Art Site** (top right) — your public portfolio opens in a new window.
 EOF
 )
 

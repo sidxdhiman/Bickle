@@ -49,21 +49,47 @@ if (!gotLock) {
 
     mainWindow.once('ready-to-show', () => mainWindow.show());
 
-    // Anything that is not our own server opens in the system browser.
+    // Anything that is not our own server opens in the system browser; our
+    // own URLs (the "Go to Art Site" button) open as a real app window.
     const isLocal = (url) => url.startsWith(`http://127.0.0.1:${port}`)
       || url.startsWith(`http://localhost:${port}`);
 
-    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-      if (!isLocal(url)) shell.openExternal(url);
-      return { action: 'deny' };
-    });
+    const applyWindowPolicies = (contents) => {
+      contents.setWindowOpenHandler(({ url }) => {
+        if (!isLocal(url)) {
+          shell.openExternal(url);
+          return { action: 'deny' };
+        }
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            autoHideMenuBar: true,
+            webPreferences: {
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: true,
+              preload: path.join(__dirname, 'preload.js'),
+            },
+          },
+        };
+      });
 
-    mainWindow.webContents.on('will-navigate', (event, url) => {
-      if (!isLocal(url)) {
-        event.preventDefault();
-        shell.openExternal(url);
-      }
-    });
+      contents.on('will-navigate', (event, url) => {
+        if (!isLocal(url)) {
+          event.preventDefault();
+          shell.openExternal(url);
+        }
+      });
+
+      // Windows opened by the renderer inherit the same rules, so external
+      // links inside them (contact links on the art site) still hand off to
+      // the system browser instead of hijacking the window.
+      contents.on('did-create-window', (childWindow) => {
+        applyWindowPolicies(childWindow.webContents);
+      });
+    };
+
+    applyWindowPolicies(mainWindow.webContents);
 
     if (process.argv.includes('--dev')) {
       mainWindow.webContents.openDevTools({ mode: 'detach' });

@@ -1,7 +1,7 @@
 {
   "name": "bickle",
   "productName": "Bickle",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "Bickle desktop app — local-first notes, tasks, habits, chat and more, running on SQLite",
   "main": "electron/main.js",
