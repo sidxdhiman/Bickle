@@ -377,12 +377,15 @@ const Settings = () => {
   const handleExportData = async (formats, shouldDelete = false) => {
     setIsExporting(true);
     try {
-      // Create a data object with all user data
+      // Real dump of the account's data from the server. Theme/font live in
+      // localStorage on this machine, so fold them into preferences here.
+      const backup = (await axios.get('/settings/export')).data;
       const dataToExport = {
-        exportDate: new Date().toISOString(),
-        theme: theme,
-        font: font,
-        // In a real app, you would fetch actual user data from the server
+        ...backup,
+        data: {
+          ...(backup.data || {}),
+          preferences: { ...((backup.data || {}).preferences || {}), theme, font },
+        },
       };
 
       // Export in selected formats
@@ -399,7 +402,7 @@ const Settings = () => {
             break;
           case 'csv':
             content = 'Key,Value\n';
-            Object.entries(dataToExport).forEach(([key, value]) => {
+            Object.entries(dataToExport.data).forEach(([key, value]) => {
               content += `"${key}","${JSON.stringify(value)}"\n`;
             });
             mimeType = 'text/csv';
@@ -423,7 +426,7 @@ const Settings = () => {
   <p>Export Date: ${new Date().toLocaleString()}</p>
   <table>
     <tr><th>Key</th><th>Value</th></tr>
-    ${Object.entries(dataToExport).map(([key, value]) => `<tr><td>${key}</td><td>${JSON.stringify(value)}</td></tr>`).join('')}
+    ${Object.entries(dataToExport.data).map(([key, value]) => `<tr><td>${key}</td><td>${JSON.stringify(value)}</td></tr>`).join('')}
   </table>
 </body>
 </html>

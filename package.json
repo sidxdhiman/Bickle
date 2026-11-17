@@ -1,9 +1,9 @@
 {
   "name": "bickle",
   "productName": "Bickle",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "private": true,
-  "description": "Bickle desktop app — local-first notes, tasks, habits, chat and more, running on SQLite",
+  "description": "Bickle desktop app \u2014 local-first notes, tasks, habits, chat and more, running on SQLite",
   "main": "electron/main.js",
   "desktopName": "bickle.desktop",
   "scripts": {
@@ -57,7 +57,7 @@
       "icon": "build/icon.png",
       "category": "Utility",
       "maintainer": "Sidharth Dhiman <sidxdhiman@users.noreply.github.com>",
-      "synopsis": "Personal OS — tasks, notes, habits, chat, all local",
+      "synopsis": "Personal OS \u2014 tasks, notes, habits, chat, all local",
       "syncDesktopName": true
     },
     "win": {

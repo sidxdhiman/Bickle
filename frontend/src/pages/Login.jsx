@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Lock, Loader2, Mail, UserPlus } from 'lucide-react';
+import { ArrowLeft, FileUp, Lock, Loader2, Mail, UserPlus } from 'lucide-react';
 import { storeSessionToken, storeUser } from '../utils/backendAuth';
 import { beginProfile } from '../utils/profileState';
+import { applyTheme } from '../utils/themeUtils';
 
 const FALLBACK_PROFILES = [
   { key: 'me', username: 'Sidharth' },
@@ -19,6 +20,20 @@ const LEGACY_OWNER = { email: 'dev@bickle.com', password: 'password' };
 const PROFILE_STYLE = {
   me: 'from-indigo-500 via-sky-400 to-cyan-300',
   d: 'from-pink-500 via-rose-400 to-amber-300',
+};
+
+// Human labels for the backup summary shown under a chosen import file.
+const IMPORT_LABELS = {
+  taskLists: 'lists',
+  tasks: 'tasks',
+  calendarEvents: 'events',
+  habits: 'habits',
+  notes: 'notes',
+  categories: 'note categories',
+  sleeps: 'sleeps',
+  transactions: 'transactions',
+  userCategories: 'money categories',
+  whiteboards: 'whiteboards',
 };
 
 const readSlotPic = (profileKey) => {
@@ -63,6 +78,12 @@ const Login = ({ onAuthSuccess }) => {
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirm, setRegConfirm] = useState('');
+  // Optional bickle-export file chosen on the register form. `createdAuth`
+  // keeps the register response so a failed import can be retried without
+  // hitting "User already exists".
+  const [regImport, setRegImport] = useState(null);
+  const [createdAuth, setCreatedAuth] = useState(null);
+  const importInputRef = useRef(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [legacyBackend, setLegacyBackend] = useState(false);
@@ -145,6 +166,32 @@ const Login = ({ onAuthSuccess }) => {
     }
   };
 
+  const handleImportFile = async (event) => {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = ''; // re-picking the same file must fire change again
+    if (!file) return;
+    setError('');
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || parsed.kind !== 'bickle-export' || !parsed.data || typeof parsed.data !== 'object' || Array.isArray(parsed.data)) {
+        setError("That file isn't a Bickle export.");
+        return;
+      }
+      setRegImport({ name: file.name, data: parsed });
+    } catch (err) {
+      setError("That file isn't a Bickle export.");
+    }
+  };
+
+  const applyImportedPreferences = (preferences) => {
+    if (!preferences || typeof preferences !== 'object') return;
+    if (preferences.theme) {
+      localStorage.setItem('bickle-theme', preferences.theme);
+      applyTheme(preferences.theme);
+    }
+    if (preferences.font) localStorage.setItem('bickle-font', preferences.font);
+  };
+
   const handleRegister = async (event) => {
     event.preventDefault();
     setError('');
@@ -153,15 +200,36 @@ const Login = ({ onAuthSuccess }) => {
       return;
     }
     setLoading(true);
+    // Captured before the try so the catch can tell "register just succeeded"
+    // apart from "register failed" even though setState hasn't flushed yet.
+    let auth = createdAuth;
     try {
-      const res = await axios.post('/auth/register', {
-        username: regUsername.trim(),
-        email: regEmail.trim(),
-        password: regPassword,
-      });
-      enterApp(res.data);
+      if (!auth) {
+        const res = await axios.post('/auth/register', {
+          username: regUsername.trim(),
+          email: regEmail.trim(),
+          password: regPassword,
+        });
+        auth = res.data;
+        setCreatedAuth(auth);
+      }
+      if (regImport) {
+        // Token first so the import request authenticates as the new account.
+        storeSessionToken(auth.token);
+        await axios.post('/settings/import', regImport.data);
+        applyImportedPreferences(regImport.data.data.preferences);
+      }
+      enterApp(auth);
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not create the account. Please try again.');
+      if (auth && regImport) {
+        setError(
+          `Account created, but the import failed: ${
+            err.response?.data?.message || 'could not read the backup'
+          } Press the button to retry the import.`
+        );
+      } else {
+        setError(err.response?.data?.message || 'Could not create the account. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -188,9 +256,16 @@ const Login = ({ onAuthSuccess }) => {
     </div>
   );
 
+  const importSummary = regImport
+    ? Object.entries(regImport.data.data || {})
+        .filter(([, rows]) => Array.isArray(rows) && rows.length)
+        .map(([key, rows]) => `${rows.length} ${IMPORT_LABELS[key] || key}`)
+        .join(', ')
+    : '';
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8 text-foreground">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/5">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-card p-8 shadow-xl shadow-black/5">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-sky-400 to-cyan-300 shadow-lg">
             <span className="text-xl font-black text-white">B</span>
@@ -207,13 +282,13 @@ const Login = ({ onAuthSuccess }) => {
                 backend to unlock D&apos;s profile and chat.
               </div>
             )}
-            <div className="flex items-start justify-center gap-6 sm:gap-10">
+            <div className="flex flex-wrap items-start justify-center gap-4 sm:gap-6">
               {(profiles || []).map((profile) => (
                 <button
                   key={profile.key}
                   type="button"
                   onClick={() => setSelected(profile)}
-                  className="group flex w-28 flex-col items-center gap-3 rounded-2xl p-3 transition-all hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className="group flex w-32 flex-col items-center gap-3 whitespace-nowrap rounded-2xl p-3 transition-all hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <span className="transition-transform duration-200 group-hover:-translate-y-1 group-hover:scale-105">
                     <ProfileAvatar profile={profile} />
@@ -227,7 +302,7 @@ const Login = ({ onAuthSuccess }) => {
                   setView('register');
                   setError('');
                 }}
-                className="group flex w-28 flex-col items-center gap-3 rounded-2xl p-3 transition-all hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="group flex w-32 flex-col items-center gap-3 whitespace-nowrap rounded-2xl p-3 transition-all hover:bg-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <span className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-dashed border-border transition-all duration-200 group-hover:-translate-y-1 group-hover:border-primary/60">
                   <UserPlus className="h-7 w-7 text-muted-foreground transition group-hover:text-primary" />
@@ -420,6 +495,47 @@ const Login = ({ onAuthSuccess }) => {
               </div>
             </label>
 
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={handleImportFile}
+            />
+            <div className="rounded-2xl border border-dashed border-border p-3">
+              {regImport ? (
+                <div className="flex items-start gap-2.5">
+                  <FileUp className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{regImport.name}</p>
+                    {importSummary && (
+                      <p className="mt-0.5 text-xs text-muted-foreground">{importSummary}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRegImport(null)}
+                    className="shrink-0 text-xs text-muted-foreground transition hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => importInputRef.current && importInputRef.current.click()}
+                  className="flex w-full items-center justify-center gap-2 text-sm text-muted-foreground transition hover:text-foreground"
+                >
+                  <FileUp className="h-4 w-4" />
+                  Import data from a previous export (optional)
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Brings tasks, notes, lists, calendar, habits, sleep, money and whiteboards from a
+              Bickle export file.
+            </p>
+
             {errorBox}
 
             <button
@@ -427,7 +543,13 @@ const Login = ({ onAuthSuccess }) => {
               disabled={loading || !regUsername.trim() || !regEmail || !regPassword || !regConfirm}
               className="w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? 'Creating account...' : 'Create account'}
+              {loading
+                ? createdAuth && regImport
+                  ? 'Importing...'
+                  : 'Creating account...'
+                : createdAuth && regImport
+                  ? 'Retry import'
+                  : 'Create account'}
             </button>
 
             <button

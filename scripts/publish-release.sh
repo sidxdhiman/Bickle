@@ -17,28 +17,28 @@ LINUX_PATH=$(sed -n 's/^path: //p' "$DIR/latest-linux.yml" | head -1)
 BODY=$(cat <<'EOF'
 ## What's new
 
-- **Create your own account** — the login screen now opens with a *Create account* tile. Sign up with your name, email and password and you get your own private space for everyday use (tasks, notes, calendar, habits, money, whiteboard and more).
-- **Sign in with email** — prefer email + password? Use *Sign in with email instead* on the login screen (e.g. sid@bickle.com with your password) — it lands on the exact same profile as before.
-- **Chat & Art are owner-circle features** — accounts made from the signup screen ship **without Chat and without the Art / Sid-Art showcase**: a fresh install has nobody to chat with, and Sid-Art is the owner's public portfolio. Profiles created from inside the app (**Settings → Profiles**) keep both features, exactly like before.
+- **Bring your data with you** — the *Create account* form now offers **Import data from a previous export**. Pick the JSON file you downloaded from **Settings → Export** on your old system (or one a friend shared with you) and every task, list, note, calendar event, habit, sleep record, money entry and whiteboard is restored into your new account.
+- **Exports that actually contain your data** — **Settings → Export** now dumps your real lists, tasks, notes, calendar, habits, sleep, money and whiteboards instead of just your theme settings. The JSON file is the portable backup the import accepts.
+- **Login screen polish** — the *Create account* tile no longer wraps its label onto two lines; profile tiles stay evenly aligned, and long profile lists wrap cleanly on narrow windows.
 
 ## How to install
 
 **Windows**
-1. Download `Bickle-Setup-1.0.5.exe` below.
+1. Download `Bickle-Setup-1.0.6.exe` below.
 2. Run it and follow the installer (you can choose the install folder).
 3. Launch **Bickle** from the Start Menu.
 
 **Linux (AppImage — recommended, self-updating)**
-1. Download `Bickle-1.0.5.AppImage` below.
+1. Download `Bickle-1.0.6.AppImage` below.
 2. Make it executable and run it:
    ```bash
-   chmod +x Bickle-1.0.5.AppImage
-   ./Bickle-1.0.5.AppImage
+   chmod +x Bickle-1.0.6.AppImage
+   ./Bickle-1.0.6.AppImage
    ```
 
 **Linux (`.deb`, Debian/Ubuntu)**
 ```bash
-sudo dpkg -i bickle_1.0.5_amd64.deb
+sudo dpkg -i bickle_1.0.6_amd64.deb
 ```
 
 **Already have Bickle installed?** AppImage and Windows builds update themselves — just restart when the *Update ready* banner appears, or use **Profile → Check for Updates**. For `.deb` installs, download the new `.deb` above and reinstall. Your existing profiles and data carry over as-is.
@@ -46,7 +46,8 @@ sudo dpkg -i bickle_1.0.5_amd64.deb
 ## How to use it
 
 1. First boot: pick **Create account** to make your own sign-in (or choose an existing profile).
-2. Sign in with your email + password any time via **Sign in with email instead**.
+2. Moving from another machine? On the old install open **Settings → Export**, save the JSON, then choose **Import data from a previous export** while creating your account here.
+3. Sign in with your email + password any time via **Sign in with email instead**.
 EOF
 )
 

@@ -24,7 +24,9 @@ const dist = {
 
 // Middleware
 app.use(cors());
-app.use(express.json({ limit: '3mb' }));
+// 25mb: settings backups (export/import) are full JSON dumps of a user's
+// data and would blow past a tighter cap.
+app.use(express.json({ limit: '25mb' }));
 
 // Uploads at both roots: stored paths are /uploads/... and the frontend
 // prefixes its API origin (/bickle) onto them, so /bickle/uploads must answer
