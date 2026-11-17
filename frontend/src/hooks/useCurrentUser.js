@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useAccess } from '../context/AccessContext';
+import { storeUser } from '../utils/backendAuth';
 
 // Shared, always-fresh view of the signed-in profile so the top bar, profile
 // modal and chat all agree on the same name/avatar.
@@ -14,6 +15,7 @@ export const refreshUser = async () => {
     const res = await axios.get('/auth/me');
     if (res.data && !res.data.isGuest) {
       cached = res.data;
+      storeUser(cached);
       publish(cached);
       return cached;
     }

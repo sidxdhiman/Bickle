@@ -13,6 +13,7 @@ const path = require('path');
 
 const { startServer } = require('./server');
 const { closeDatabase } = require('./db');
+const { updateById } = require('./db/helpers');
 
 let passed = 0;
 let failed = 0;
@@ -82,6 +83,15 @@ async function main() {
     });
     check('register other user', other.status === 201 && !!other.data.token, other);
     const otherToken = other.data.token;
+
+    // Public signups come out restricted (no chat, no Art) — that's the
+    // first-boot product rule. This suite needs full accounts to exercise
+    // module scoping, so promote them the way an in-app created profile is.
+    check('signups are restricted by default',
+      owner.data.restricted === true && other.data.restricted === true,
+      { owner: owner.data.restricted, other: other.data.restricted });
+    updateById('users', owner.data._id, { restricted: false });
+    updateById('users', other.data._id, { restricted: false });
 
     // ----------------------------------------------------------- lists ----
     console.log('\nlists');

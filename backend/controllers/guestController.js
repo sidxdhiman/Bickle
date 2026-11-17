@@ -35,15 +35,21 @@ exports.createSession = async (req, res) => {
       return res.status(400).json({ message: 'A valid duration in minutes is required' });
     }
 
+    // Modules a restricted signup owns: everything grantable except the
+    // Art module their own account does not have to share in the first place.
+    const grantable = req.user.restricted
+      ? GRANTABLE_PAGE_KEYS.filter((page) => page !== 'art')
+      : GRANTABLE_PAGE_KEYS;
+
     const pages = Array.isArray(allowedPages)
-      ? allowedPages.filter((page) => GRANTABLE_PAGE_KEYS.includes(page))
+      ? allowedPages.filter((page) => grantable.includes(page))
       : [];
 
     // Per-module read/write permissions: { pageKey: 'view' | 'edit' }.
     const access = {};
     if (pageAccess && typeof pageAccess === 'object' && !Array.isArray(pageAccess)) {
       for (const [page, mode] of Object.entries(pageAccess)) {
-        if (!GRANTABLE_PAGE_KEYS.includes(page)) continue;
+        if (!grantable.includes(page)) continue;
         if (mode !== 'view' && mode !== 'edit') continue;
         access[page] = mode;
       }
@@ -54,7 +60,7 @@ exports.createSession = async (req, res) => {
     const seen = new Set();
     const items = [];
     for (const raw of rawItems) {
-      if (!raw || !GRANTABLE_PAGE_KEYS.includes(raw.page)) continue;
+      if (!raw || !grantable.includes(raw.page)) continue;
       const itemId = typeof raw.itemId === 'string' ? raw.itemId.trim().slice(0, 64) : '';
       if (!itemId) continue;
       const key = `${raw.page}:${itemId}`;

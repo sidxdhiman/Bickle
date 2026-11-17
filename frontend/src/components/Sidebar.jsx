@@ -7,6 +7,7 @@ import { PAGES } from '../config/pages';
 import { useAccess } from '../context/AccessContext';
 import { useChatUnread } from '../hooks/useChatUnread';
 import { clearSearchIndex } from '../utils/searchIndex';
+import { clearStoredUser } from '../utils/backendAuth';
 import { endActiveProfile } from '../utils/profileState';
 
 function cn(...inputs) {
@@ -23,6 +24,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
+    clearStoredUser();
     endActiveProfile();
     clearSearchIndex().catch(() => {});
     onClose?.();

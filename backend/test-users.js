@@ -70,6 +70,20 @@ const check = (cond, msg, extra) => {
     const dToken = dLogin.data.token;
     check(meLogin.data._id !== dLogin.data._id, 'profiles are distinct accounts');
     check(meLogin.data.showcase === true && dLogin.data.showcase === false, 'only the me profile is the showcase profile');
+    check(
+      meLogin.data.restricted === false && meLogin.data.key === 'me'
+        && dLogin.data.restricted === false && dLogin.data.key === 'd',
+      'seeded profiles sign in unrestricted with their picker keys',
+      { me: meLogin.data, d: dLogin.data }
+    );
+
+    // The owner can also sign in with the raw email from the login screen.
+    const emailLogin = await api('POST', '/auth/login', { body: { email: 'sid@bickle.com', password: SEED_PASSWORD } });
+    check(
+      emailLogin.status === 200 && emailLogin.data.key === 'me' && emailLogin.data.restricted === false,
+      'owner signs in with sid@bickle.com + password',
+      emailLogin.data
+    );
 
     // --- Notes: each profile sees only its own ---
     const meNote = await api('POST', '/notes', { token: meToken, body: { title: 'Note From Me', content: 'private' } });
@@ -154,13 +168,39 @@ const check = (cond, msg, extra) => {
     const dUnreadAfter = await api('GET', '/chat/unread-count', { token: dToken });
     check(dUnreadAfter.data.count === 0, 'D unread count back to 0', dUnreadAfter.data);
 
-    // --- Third accounts cannot reach the conversation ---
+    // --- Third accounts: public signups are restricted (no chat, no art) ---
+    const reservedReg = await api('POST', '/auth/register', { body: { username: 'me', email: 'evil@test.dev', password: 'secret123' } });
+    check(reservedReg.status === 400, 'seeded picker keys stay reserved for signups too', reservedReg.data);
+    const weakReg = await api('POST', '/auth/register', { body: { username: 'weakling', email: 'weak@test.dev', password: '123' } });
+    check(weakReg.status === 400, 'signup requires a 6+ character password', weakReg.data);
+
     const stranger = await api('POST', '/auth/register', { body: { username: 'stranger', email: 'stranger@test.dev', password: 'secret123' } });
     check(stranger.status === 201, 'third account registered', stranger.data);
+    check(stranger.data.restricted === true, 'public signup creates a restricted account', stranger.data);
+    check(stranger.data.key === 'stranger', 'restricted signup signs in with its username as key', stranger.data);
+    const strangerChatList = await api('GET', '/chat', { token: stranger.data.token });
+    check(strangerChatList.status === 403, 'restricted signup has no chat', strangerChatList.data);
+    const strangerUnread = await api('GET', '/chat/unread-count', { token: stranger.data.token });
+    check(strangerUnread.status === 403, 'restricted signup has no chat unread counter', strangerUnread.data);
+    const strangerArt = await api('POST', '/art/blogs', { token: stranger.data.token, body: { title: 'Nope', content: 'x' } });
+    check(strangerArt.status === 403, 'restricted signup has no Art module', strangerArt.data);
+    const strangerArtRead = await api('GET', '/art/blogs', { token: stranger.data.token });
+    check(strangerArtRead.status === 403, 'restricted signup cannot read art either', strangerArtRead.data);
     const strangerRead = await api('GET', `/chat/${convId}/messages`, { token: stranger.data.token });
-    check(strangerRead.status === 404, 'non-participant cannot read the conversation', strangerRead.data);
+    check(strangerRead.status === 403, 'restricted signup cannot read the conversation', strangerRead.data);
     const strangerSend = await api('POST', `/chat/${convId}/messages`, { token: stranger.data.token, body: { text: 'intruder' } });
-    check(strangerSend.status === 404, 'non-participant cannot post to the conversation', strangerSend.data);
+    check(strangerSend.status === 403, 'restricted signup cannot post to the conversation', strangerSend.data);
+    const strangerCreate = await api('POST', '/auth/create-profile', { token: stranger.data.token, body: { username: 'Escalate', password: 'secret123' } });
+    check(strangerCreate.status === 403, 'restricted signup cannot mint full-access profiles', strangerCreate.data);
+    const strangerShare = await api('POST', '/guest', { token: stranger.data.token, body: { label: 'Share', durationMinutes: 5, allowedPages: ['notes', 'art'] } });
+    check(
+      strangerShare.status === 201 && !strangerShare.data.allowedPages.includes('art'),
+      'restricted signup cannot grant the Art module to a guest link',
+      strangerShare.data
+    );
+    if (strangerShare.data && strangerShare.data._id) {
+      await api('DELETE', `/guest/${strangerShare.data._id}`, { token: stranger.data.token });
+    }
 
     // --- Guests are blocked from chat entirely ---
     const gs = await api('POST', '/guest', { token: meToken, body: { label: 'Watcher', durationMinutes: 5, allowedPages: ['notes'] } });
@@ -329,11 +369,11 @@ const check = (cond, msg, extra) => {
 
     // Non-participants cannot touch the settings either.
     const strangerSettings = await api('PUT', `/chat/${convId}/settings`, { token: stranger.data.token, body: { mode: 'off' } });
-    check(strangerSettings.status === 404, 'stranger cannot change chat settings', strangerSettings.data);
+    check(strangerSettings.status === 403, 'stranger cannot change chat settings', strangerSettings.data);
 
     // --- Either profile can wipe the whole conversation and start fresh ---
     const strangerWipe = await api('POST', `/chat/${convId}/clear`, { token: stranger.data.token, body: {} });
-    check(strangerWipe.status === 404, 'non-participant cannot clear the conversation', strangerWipe.data);
+    check(strangerWipe.status === 403, 'non-participant cannot clear the conversation', strangerWipe.data);
     const wipe = await api('POST', `/chat/${convId}/clear`, { token: dToken, body: {} });
     check(
       wipe.status === 200 && wipe.data.ok && wipe.data.deleted > 0,
@@ -416,10 +456,22 @@ const check = (cond, msg, extra) => {
 
     const rileyLogin = await api('POST', '/auth/login', { body: { profile: 'Riley', password: 'riley-pass-1' } });
     check(rileyLogin.status === 200 && rileyLogin.data.token && rileyLogin.data.username === 'Riley', 'created profile signs in from the picker', rileyLogin.data);
+    check(rileyLogin.data.restricted === false, 'a profile created from inside the app is unrestricted', rileyLogin.data);
 
     // Full access of their own: a note nobody else can see.
     const rileyNote = await api('POST', '/notes', { token: rileyLogin.data.token, body: { title: 'Riley Private Note', content: 'mine' } });
     check(rileyNote.status === 201, 'created profile has full access to the app', rileyNote.data);
+    // ...including the two owner-circle features: chat with the seeded
+    // profiles and the Art module.
+    const rileyChat = await api('GET', '/chat', { token: rileyLogin.data.token });
+    check(
+      rileyChat.status === 200 && rileyChat.data.length === 2
+        && rileyChat.data.every((c) => c.peer.username === 'Sidharth' || c.peer.username === 'D'),
+      'created profile gets chat with the seeded profiles',
+      rileyChat.data && rileyChat.data.map((c) => c.peer && c.peer.username)
+    );
+    const rileyArt = await api('POST', '/art/blogs', { token: rileyLogin.data.token, body: { title: 'Riley Art', content: 'mine' } });
+    check(rileyArt.status === 201, 'created profile keeps the Art module', rileyArt.data);
     const meSeesRiley = await api('GET', '/notes', { token: meToken });
     check(meSeesRiley.status === 200 && !meSeesRiley.data.some((n) => n.title === 'Riley Private Note'), "created profile's data stays private", meSeesRiley.data && meSeesRiley.data.map((n) => n.title));
 

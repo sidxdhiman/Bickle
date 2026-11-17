@@ -8,6 +8,10 @@ const AccessContext = createContext({
   expiresAt: null,
   endGuest: () => {},
   canEdit: () => true,
+  // Modules stripped from this session entirely (restricted first-boot
+  // signups lose chat + art; guests get their granted list instead).
+  hiddenPages: [],
+  restricted: false,
 });
 
 export const AccessProvider = ({ value, children }) => (

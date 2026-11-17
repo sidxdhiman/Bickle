@@ -7,6 +7,7 @@ import { useDockSettings } from '../hooks/useDockSettings';
 import { useBackground } from '../hooks/useBackground';
 import { useChatUnread } from '../hooks/useChatUnread';
 import { clearSearchIndex } from '../utils/searchIndex';
+import { clearStoredUser } from '../utils/backendAuth';
 import { endActiveProfile } from '../utils/profileState';
 
 const SIGMA = 0.85;
@@ -138,6 +139,7 @@ const Dock = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
+    clearStoredUser();
     endActiveProfile();
     clearSearchIndex().catch(() => {});
     navigate('/');

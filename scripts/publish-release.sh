@@ -17,35 +17,36 @@ LINUX_PATH=$(sed -n 's/^path: //p' "$DIR/latest-linux.yml" | head -1)
 BODY=$(cat <<'EOF'
 ## What's new
 
-- **Fixed: "Go to Art Site"** — the button on the Art page now actually opens your public Sid-Art showcase in its own window (it was being blocked by the desktop app's window policy, so nothing happened).
-- External links inside that window (contact, LinkedIn, GitHub) still hand off to your system browser, as before.
+- **Create your own account** — the login screen now opens with a *Create account* tile. Sign up with your name, email and password and you get your own private space for everyday use (tasks, notes, calendar, habits, money, whiteboard and more).
+- **Sign in with email** — prefer email + password? Use *Sign in with email instead* on the login screen (e.g. sid@bickle.com with your password) — it lands on the exact same profile as before.
+- **Chat & Art are owner-circle features** — accounts made from the signup screen ship **without Chat and without the Art / Sid-Art showcase**: a fresh install has nobody to chat with, and Sid-Art is the owner's public portfolio. Profiles created from inside the app (**Settings → Profiles**) keep both features, exactly like before.
 
 ## How to install
 
 **Windows**
-1. Download `Bickle-Setup-1.0.4.exe` below.
+1. Download `Bickle-Setup-1.0.5.exe` below.
 2. Run it and follow the installer (you can choose the install folder).
 3. Launch **Bickle** from the Start Menu.
 
 **Linux (AppImage — recommended, self-updating)**
-1. Download `Bickle-1.0.4.AppImage` below.
+1. Download `Bickle-1.0.5.AppImage` below.
 2. Make it executable and run it:
    ```bash
-   chmod +x Bickle-1.0.4.AppImage
-   ./Bickle-1.0.4.AppImage
+   chmod +x Bickle-1.0.5.AppImage
+   ./Bickle-1.0.5.AppImage
    ```
 
 **Linux (`.deb`, Debian/Ubuntu)**
 ```bash
-sudo dpkg -i bickle_1.0.4_amd64.deb
+sudo dpkg -i bickle_1.0.5_amd64.deb
 ```
 
-**Already have Bickle installed?** AppImage and Windows builds update themselves — just restart when the *Update ready* banner appears, or use **Profile → Check for Updates**. For `.deb` installs, download the new `.deb` above and reinstall.
+**Already have Bickle installed?** AppImage and Windows builds update themselves — just restart when the *Update ready* banner appears, or use **Profile → Check for Updates**. For `.deb` installs, download the new `.deb` above and reinstall. Your existing profiles and data carry over as-is.
 
 ## How to use it
 
-1. Open the **Art** page from the sidebar.
-2. Click **Go to Art Site** (top right) — your public portfolio opens in a new window.
+1. First boot: pick **Create account** to make your own sign-in (or choose an existing profile).
+2. Sign in with your email + password any time via **Sign in with email instead**.
 EOF
 )
 

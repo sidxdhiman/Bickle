@@ -3,6 +3,7 @@ const {
 } = require('../db/helpers');
 const { PROFILES } = require('../config/profiles');
 const { findProfileUser } = require('../utils/seedProfiles');
+const { denyRestrictedAccount } = require('../middleware/auth');
 const { kindOf } = require('../middleware/chatUpload');
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -17,14 +18,16 @@ const DISAPPEAR_LABELS = {
   viewed: 'after viewing',
 };
 
-// Chat is reserved for the real profiles. (Guest tokens are rejected earlier
-// by the page map; this is defense in depth.)
-const denyGuest = (req, res) => {
+// Chat is reserved for the real full-access profiles: guests (rejected
+// earlier by the page map) and restricted first-boot signups both stay out —
+// the signup flow has no contacts to talk to anyway. Defense in depth:
+// the frontend hides the module for them too.
+const denyChat = (req, res) => {
   if (req.guest) {
     res.status(403).json({ message: 'Chat is not available for shared sessions' });
     return true;
   }
-  return false;
+  return denyRestrictedAccount(req, res, 'Chat');
 };
 
 const getParticipants = (conversationId) =>
@@ -114,7 +117,7 @@ const unreadClause = (conversationIds, me) => {
 // the list with peer info, last message and unread counts.
 exports.listConversations = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const me = req.dataScope.user;
 
     // Only the profile accounts are chat contacts — stray legacy/test users
@@ -202,7 +205,7 @@ exports.listConversations = async (req, res) => {
 // conversations. `latest` gives the popup its preview text.
 exports.unreadCount = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const me = req.dataScope.user;
 
     const conversations = query(
@@ -247,7 +250,7 @@ exports.unreadCount = async (req, res) => {
 
 exports.getMessages = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
@@ -273,7 +276,7 @@ exports.getMessages = async (req, res) => {
 
 exports.sendMessage = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
@@ -334,7 +337,7 @@ exports.sendMessage = async (req, res) => {
 
 exports.markRead = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
@@ -379,7 +382,7 @@ exports.markRead = async (req, res) => {
 // the conversation), and any timed expiries are flushed while we are here.
 exports.leaveConversation = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
@@ -403,7 +406,7 @@ exports.leaveConversation = async (req, res) => {
 // Either participant may do it; the sidebar preview resets with the messages.
 exports.clearMessages = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 
@@ -431,7 +434,7 @@ exports.clearMessages = async (req, res) => {
 // has ever been sent in the chat.
 exports.updateSettings = async (req, res) => {
   try {
-    if (denyGuest(req, res)) return;
+    if (denyChat(req, res)) return;
     const conversation = await findOwnedConversation(req);
     if (!conversation) return res.status(404).json({ message: 'Conversation not found' });
 

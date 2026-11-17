@@ -49,11 +49,15 @@ const ensurePolling = () => {
 };
 
 export const useChatUnread = () => {
-  const { isGuest } = useAccess();
+  const { isGuest, allowedPages } = useAccess();
   const [, force] = useState(0);
 
+  // Restricted signups have no chat module at all — never poll (the API
+  // would answer 403) and never show a badge.
+  const chatEnabled = !isGuest && allowedPages.includes('chat');
+
   useEffect(() => {
-    if (isGuest) return undefined;
+    if (!chatEnabled) return undefined;
     const listener = () => force((value) => value + 1);
     listeners.add(listener);
     ensurePolling();
@@ -64,9 +68,9 @@ export const useChatUnread = () => {
         timer = null;
       }
     };
-  }, [isGuest]);
+  }, [chatEnabled]);
 
-  return isGuest ? 0 : count;
+  return chatEnabled ? count : 0;
 };
 
 // Subscribe to "the other profile just messaged me" events (toast popup).

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import axios from 'axios';
-import { validateStoredToken } from './utils/backendAuth';
+import { validateStoredToken, readStoredUser } from './utils/backendAuth';
 import { clearSearchIndex } from './utils/searchIndex';
 import { AccessProvider, useAccess } from './context/AccessContext';
 import { ALL_PAGE_KEYS, PAGES, pageKeyForApiUrl } from './config/pages';
@@ -106,7 +106,12 @@ axios.interceptors.request.use((config) => {
 });
 
 const RequireAccess = ({ pageKey, children }) => {
-  const { isGuest, allowedPages } = useAccess();
+  const { isGuest, allowedPages, hiddenPages } = useAccess();
+  // Restricted signups simply do not have this module — send them home
+  // instead of rendering an area their account cannot use.
+  if (!isGuest && hiddenPages.includes(pageKey)) {
+    return <Navigate to="/" replace />;
+  }
   if (!isGuest || allowedPages.includes(pageKey)) {
     return children;
   }
@@ -121,12 +126,25 @@ const RequireAccess = ({ pageKey, children }) => {
   return <Navigate to={firstAllowed.path} replace />;
 };
 
+// The public Sid-Art showcase stays on the open web, but a restricted
+// signup never reaches it from inside the app.
+const SidArtRoute = () => {
+  const { isGuest, restricted } = useAccess();
+  if (!isGuest && restricted) {
+    return <Navigate to="/" replace />;
+  }
+  return <SidArt />;
+};
+
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [guest, setGuest] = useState(null);
   const [guestError, setGuestError] = useState(null);
   const [showGuestWelcome, setShowGuestWelcome] = useState(false);
   const [hasCheckedAuth, setHasCheckedAuth] = useState(false);
+  // Signed-in profile from storage — `restricted` (public first-boot signup)
+  // decides which modules exist for this session.
+  const [me, setMe] = useState(() => readStoredUser());
 
   const endGuest = useCallback(async () => {
     const stored = readStoredGuest();
@@ -179,9 +197,11 @@ const App = () => {
       if (unlocked && token) {
         const valid = await validateStoredToken();
         setIsAuthenticated(!!valid);
+        setMe(valid ? readStoredUser() : null);
         if (!valid) clearSearchIndex().catch(() => {});
       } else {
         localStorage.removeItem('authUnlocked');
+        setMe(null);
       }
 
       setHasCheckedAuth(true);
@@ -235,15 +255,34 @@ const App = () => {
       <BrowserRouter basename="/bickle" future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
           <Route path="/sid-art" element={<SidArt />} />
-          <Route path="/*" element={<Login onAuthSuccess={() => setIsAuthenticated(true)} />} />
+          <Route
+            path="/*"
+            element={
+              <Login
+                onAuthSuccess={() => {
+                  setMe(readStoredUser());
+                  setIsAuthenticated(true);
+                }}
+              />
+            }
+          />
         </Routes>
       </BrowserRouter>
     );
   }
 
+  // Restricted first-boot signups ship without chat and without the
+  // Art / Sid-Art module; every other profile keeps the whole product.
+  const restricted = !guest && !!me?.restricted;
+  const hiddenPages = restricted ? ['chat', 'art'] : [];
+
   const accessValue = {
     isGuest: !!guest,
-    allowedPages: guest ? guest.allowedPages : ALL_PAGE_KEYS,
+    restricted,
+    hiddenPages,
+    allowedPages: guest
+      ? guest.allowedPages
+      : ALL_PAGE_KEYS.filter((key) => !hiddenPages.includes(key)),
     pageAccess: guest?.pageAccess || {},
     expiresAt: guest?.expiresAt || null,
     endGuest,
@@ -257,7 +296,7 @@ const App = () => {
     <AccessProvider value={accessValue}>
       <BrowserRouter basename="/bickle" future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
         <Routes>
-          <Route path="/sid-art" element={<SidArt />} />
+          <Route path="/sid-art" element={<SidArtRoute />} />
           <Route path="/" element={<MainLayout />}>
             <Route index element={<RequireAccess pageKey="dashboard"><Dashboard /></RequireAccess>} />
             <Route path="tasks" element={<RequireAccess pageKey="tasks"><Tasks /></RequireAccess>} />

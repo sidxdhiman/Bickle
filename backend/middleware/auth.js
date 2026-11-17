@@ -89,4 +89,15 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+// Feature gate for accounts created from the public first-boot signup screen.
+// They ship without chat and without the Art / Sid-Art module — the frontend
+// hides those areas, and this keeps the API honest if it is called directly.
+const denyRestrictedAccount = (req, res, feature) => {
+  if (req.user && req.user.restricted) {
+    res.status(403).json({ message: `${feature} is not available on this account` });
+    return true;
+  }
+  return false;
+};
+
+module.exports = { protect, denyRestrictedAccount };

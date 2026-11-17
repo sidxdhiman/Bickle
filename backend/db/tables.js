@@ -11,7 +11,7 @@
 // are never serialized directly, so they need no metadata.
 
 const TABLES = {
-  users: { bools: ['showcase'], json: ['preferences'] },
+  users: { bools: ['showcase', 'restricted'], json: ['preferences'] },
 
   guest_sessions: {
     bools: ['active'],

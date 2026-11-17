@@ -6,7 +6,9 @@ import axios from 'axios';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { GRANTABLE_PAGES } from '../config/pages';
+import { useAccess } from '../context/AccessContext';
 import { clearSearchIndex } from '../utils/searchIndex';
+import { clearStoredUser } from '../utils/backendAuth';
 import { useCurrentUser, refreshUser } from '../hooks/useCurrentUser';
 import { endActiveProfile } from '../utils/profileState';
 import { useAppUpdate, updateStatusText, getDesktopApi } from '../hooks/useAppUpdate';
@@ -143,6 +145,9 @@ const ProfileModal = ({ isOpen, onClose }) => {
   const [profilePic, setProfilePic] = useState(null);
   const [savingAvatar, setSavingAvatar] = useState(false);
   const currentUser = useCurrentUser();
+  const { hiddenPages } = useAccess();
+  // Restricted signups cannot grant modules their own account does not have.
+  const grantablePages = GRANTABLE_PAGES.filter((page) => !hiddenPages.includes(page.key));
   const navigate = useNavigate();
   const avatar = currentUser?.avatar || profilePic;
   const update = useAppUpdate();
@@ -260,6 +265,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
     localStorage.removeItem('token');
     localStorage.removeItem('backendToken');
     localStorage.removeItem('authUnlocked');
+    clearStoredUser();
     endActiveProfile();
     clearSearchIndex().catch(() => {});
     onClose();
@@ -620,7 +626,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-semibold">What can they access?</label>
                   <div className="flex gap-3 text-xs">
-                    <button type="button" onClick={() => setPages(GRANTABLE_PAGES.map((p) => p.key))} className="text-primary hover:underline">
+                    <button type="button" onClick={() => setPages(grantablePages.map((p) => p.key))} className="text-primary hover:underline">
                       Select all
                     </button>
                     <button type="button" onClick={() => setPages([])} className="text-muted-foreground hover:underline">
@@ -629,7 +635,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
                   </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {GRANTABLE_PAGES.map((page) => {
+                  {grantablePages.map((page) => {
                     const selected = pages.includes(page.key);
                     return (
                       <button
@@ -661,7 +667,7 @@ const ProfileModal = ({ isOpen, onClose }) => {
                   </p>
                   <div className="space-y-1.5">
                     {pages.map((key) => {
-                      const page = GRANTABLE_PAGES.find((p) => p.key === key);
+                      const page = grantablePages.find((p) => p.key === key);
                       if (!page) return null;
                       const mode = moduleAccess[key] === 'view' ? 'view' : 'edit';
                       return (

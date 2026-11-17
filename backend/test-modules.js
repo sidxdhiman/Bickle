@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { openDatabase, closeDatabase } = require('./db');
-const { get } = require('./db/helpers');
+const { get, updateById } = require('./db/helpers');
 
 const BASE = 'http://127.0.0.1:5098/api';
 
@@ -55,6 +55,10 @@ const ALL_PAGES = ['tasks', 'habits', 'focus', 'calendar', 'notes', 'whiteboard'
 
     const reg = await api('POST', '/auth/register', { body: { username: 'owner', email: 'owner@test.dev', password: 'secret123' } });
     const ownerToken = reg.data.token;
+    // Signups are restricted (no chat, no Art) by default; module scoping
+    // below needs a full account, so promote it like an in-app profile.
+    check(reg.status === 201 && reg.data.restricted === true, 'owner registered restricted', reg.data);
+    updateById('users', reg.data._id, { restricted: false });
 
     // Owner creates one item per module
     const list = await api('POST', '/lists', { token: ownerToken, body: { name: 'My List' } });

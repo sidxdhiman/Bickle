@@ -24,6 +24,7 @@ import {
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { SettingsSkeleton } from '../components/Skeletons';
+import { useAccess } from '../context/AccessContext';
 import { applyTheme } from '../utils/themeUtils';
 import { useDockSettings } from '../hooks/useDockSettings';
 import { useNavMode } from '../hooks/useNavMode';
@@ -216,6 +217,7 @@ const ExportModal = ({ isOpen, onClose, onExport, isExporting }) => {
 const Settings = () => {
   const [theme, setTheme] = useState('dark');
   const [font, setFont] = useState('inter');
+  const { restricted } = useAccess();
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -1026,7 +1028,8 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* Profiles */}
+      {/* Profiles — only full-access accounts may mint new sign-ins */}
+      {!restricted && (
       <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <Users className="w-6 h-6 text-primary" />
@@ -1106,6 +1109,7 @@ const Settings = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* Updates */}
       {update.supported && (

@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS "users" (
   "password"     TEXT NOT NULL,
   "avatar"       TEXT NOT NULL DEFAULT '',
   "showcase"     INTEGER NOT NULL DEFAULT 0,
+  -- Accounts created from the public first-boot signup screen: no chat, no
+  -- Art/Sid-Art module. Seeded profiles and profiles minted from inside the
+  -- app (create-profile) stay unrestricted.
+  "restricted"   INTEGER NOT NULL DEFAULT 0,
   "preferences"  TEXT NOT NULL DEFAULT '{"theme":"dark","notifications":true}',
   "createdAt"    TEXT NOT NULL,
   "updatedAt"    TEXT NOT NULL

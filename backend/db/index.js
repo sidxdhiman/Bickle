@@ -23,11 +23,29 @@ function openDatabase(filePath) {
   db.pragma('synchronous = NORMAL');
 
   // schema.sql is all CREATE IF NOT EXISTS — running it every boot is the
-  // migration mechanism (add a table/column there, it appears on restart).
+  // migration mechanism (add a table there, it appears on restart). New
+  // columns on existing tables need a guarded ALTER instead: CREATE IF
+  // NOT EXISTS leaves an old table untouched.
   const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8');
   db.exec(schema);
+  applyColumnMigrations(db);
 
   return db;
+}
+
+// [table, column, DDL] triples for columns added after a table first shipped.
+// Each is skipped when the column already exists, so it is safe every boot.
+const COLUMN_MIGRATIONS = [
+  ['users', 'restricted', 'ALTER TABLE "users" ADD COLUMN "restricted" INTEGER NOT NULL DEFAULT 0'],
+];
+
+function applyColumnMigrations(database) {
+  for (const [table, column, ddl] of COLUMN_MIGRATIONS) {
+    const columns = database.prepare(`PRAGMA table_info("${table}")`).all();
+    if (!columns.some((info) => info.name === column)) {
+      database.exec(ddl);
+    }
+  }
 }
 
 function getDb() {

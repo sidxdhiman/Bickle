@@ -9,12 +9,27 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
+// The picker key this account signs in with: seeded profiles resolve to
+// their config key ('me' / 'd', legacy owner email included), everyone else
+// uses their username — exactly the key listProfiles publishes.
+const profileKeyForUser = (user) => {
+  const seeded = PROFILES.find((profile) => profile.email === user.email)
+    || PROFILES.find((profile) => profile.username === user.username)
+    || (user.email === 'dev@bickle.com' ? PROFILES[0] : null);
+  return seeded ? seeded.key : user.username;
+};
+
 const publicUser = (user) => ({
   _id: user._id,
   username: user.username,
   email: user.email,
   avatar: user.avatar || '',
   showcase: !!user.showcase,
+  // Restricted accounts (public first-boot signups) run without chat and
+  // without the Art / Sid-Art module; seeded and in-app created profiles
+  // get the full product.
+  restricted: !!user.restricted,
+  key: profileKeyForUser(user),
 });
 
 // Mongoose's lowercase+trim setters on the email path, applied at the edges.
@@ -49,13 +64,17 @@ exports.listProfiles = async (req, res) => {
   }
 };
 
-// Mints a brand-new sign-in for somebody else. Any signed-in profile may do
-// it (guests may not) — the new account gets the whole app with its own
-// private data partition, exactly like the seeded profiles.
+// Mints a brand-new sign-in for somebody else. Any signed-in full profile
+// may do it (guests may not, restricted signups may not) — the new account
+// gets the whole app with its own private data partition, chat included,
+// exactly like the seeded profiles.
 exports.createProfile = async (req, res) => {
   try {
     if (req.guest) {
       return res.status(403).json({ message: 'Guests cannot create profiles' });
+    }
+    if (req.user.restricted) {
+      return res.status(403).json({ message: 'Your account cannot create profiles' });
     }
 
     const username = String((req.body && req.body.username) || '').trim();
@@ -95,11 +114,29 @@ exports.createProfile = async (req, res) => {
   }
 };
 
+// Public first-boot signup ("Create account" on the login screen). These
+// accounts are deliberately restricted: no chat contacts and no Art module,
+// because a brand-new install has nobody to talk to and nothing to publish.
+// Full-access accounts are only ever minted by a signed-in profile through
+// createProfile above.
 exports.registerUser = async (req, res) => {
   try {
     const username = String((req.body && req.body.username) || '').trim();
     const email = normalizeEmail(req.body && req.body.email);
     const { password } = req.body;
+
+    if (!username || username.length > 32) {
+      return res.status(400).json({ message: 'Username must be 1-32 characters' });
+    }
+    if (profileByKey(username)) {
+      return res.status(400).json({ message: 'That username is reserved' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: 'Enter a valid email address' });
+    }
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    }
 
     const userExists = get(
       'SELECT "_id" FROM "users" WHERE "email" = ? OR "username" = ?',
@@ -113,12 +150,11 @@ exports.registerUser = async (req, res) => {
       username,
       email,
       password: await hashPassword(password),
+      restricted: true,
     });
 
     res.status(201).json({
-      _id: user._id,
-      username: user.username,
-      email: user.email,
+      ...publicUser(user),
       token: generateToken(user._id),
     });
   } catch (error) {
